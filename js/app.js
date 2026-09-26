@@ -17,12 +17,18 @@ const PLACEHOLDER_ART = 'data:image/svg+xml,' + encodeURIComponent(
 const $ = (id) => document.getElementById(id);
 const els = {
   login: $('login'), connect: $('connect'), loginError: $('login-error'), installHint: $('install-hint'),
+  useOtherDevice: $('use-other-device'),
+  linkReceive: $('link-receive'), linkUrl: $('link-url'), linkForm: $('link-form'), linkInput: $('link-input'),
+  linkError: $('link-error'), linkBack: $('link-back'),
+  linkSend: $('link-send'), linkSendStart: $('link-send-start'), linkSendCode: $('link-send-code'),
+  linkLogin: $('link-login'), linkCode: $('link-code'), linkCopy: $('link-copy'),
   player: $('player'), art: $('art'), album: $('album'), artist: $('artist'),
   progress: $('progress'), progressTrack: $('progress-track'), progressFill: $('progress-fill'),
   prev: $('prev'), play: $('play'), next: $('next'),
   lyrics: $('lyrics'), lines: $('lyrics-lines'), empty: $('lyrics-empty'),
   emptyArt: $('lyrics-art'), emptyMessage: $('lyrics-message'), toast: $('toast'),
 };
+const screens = [els.login, els.linkReceive, els.linkSend, els.player];
 
 // Latest known playback, or null when nothing is playing. Progress between polls is
 // estimated locally from progressMs + time since fetchedAt.
@@ -41,31 +47,37 @@ start();
 
 async function start() {
   if (isDemo) return showPlayer();
+  let result;
   try {
-    await auth.handleRedirect();
+    result = await auth.handleRedirect();
   } catch (err) {
     return showLogin(err.message);
   }
-  if (auth.isLoggedIn()) showPlayer();
+  if (result?.codeForAnotherDevice) showLinkSend(result.codeForAnotherDevice);
+  else if (new URLSearchParams(location.search).has('link')) showLinkSend();
+  else if (auth.isLoggedIn()) showPlayer();
   else showLogin();
 }
 
+function showScreen(screen) {
+  for (const s of screens) s.hidden = s !== screen;
+  document.body.classList.toggle('in-player', screen === els.player);
+  if (screen !== els.player) {
+    running = false;
+    clearTimeout(pollTimer);
+    playback = null;
+  }
+}
+
 function showLogin(error) {
-  running = false;
-  clearTimeout(pollTimer);
-  playback = null;
-  document.body.classList.remove('in-player');
-  els.player.hidden = true;
-  els.login.hidden = false;
+  showScreen(els.login);
   els.loginError.textContent = error || '';
   els.loginError.hidden = !error;
   els.installHint.hidden = !(isIOS() && !navigator.standalone);
 }
 
 function showPlayer() {
-  els.login.hidden = true;
-  els.player.hidden = false;
-  document.body.classList.add('in-player');
+  showScreen(els.player);
   running = true;
   renderInfo();
   renderLyrics();
@@ -239,6 +251,55 @@ for (const type of ['pointerup', 'pointerleave', 'pointercancel']) {
 els.art.addEventListener('contextmenu', (e) => e.preventDefault());
 
 els.connect.addEventListener('click', () => auth.login());
+
+// ---- Logging in via another device ---------------------------------------------------------
+// For phones where Spotify's own login page doesn't work (e.g. an iPhone 7 on iOS 15): log in
+// on a device where it does, then paste the code it shows.
+
+els.useOtherDevice.addEventListener('click', () => {
+  showScreen(els.linkReceive);
+  els.linkUrl.textContent = `${auth.REDIRECT_URI.replace(/^https?:\/\//, '')}?link`;
+  els.linkError.hidden = true;
+});
+els.linkBack.addEventListener('click', () => showLogin());
+
+els.linkForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const code = els.linkInput.value.replace(/\s+/g, ''); // texting a code can add line breaks
+  if (!code) return;
+  els.linkError.hidden = true;
+  try {
+    await auth.loginWithCode(code);
+  } catch (err) {
+    els.linkError.textContent = err instanceof auth.AuthError
+      ? "That code didn't work. Make a new one on the other device and paste it again."
+      : "Couldn't reach Spotify. Check the internet connection and try again.";
+    els.linkError.hidden = false;
+    return;
+  }
+  els.linkInput.value = '';
+  showPlayer();
+});
+
+function showLinkSend(code) {
+  showScreen(els.linkSend);
+  els.linkSendStart.hidden = !!code;
+  els.linkSendCode.hidden = !code;
+  els.linkCode.value = code || '';
+}
+
+els.linkLogin.addEventListener('click', () => auth.login({ forAnotherDevice: true }));
+
+els.linkCopy.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(els.linkCode.value);
+  } catch {
+    els.linkCode.select();
+    document.execCommand('copy');
+  }
+  els.linkCopy.textContent = 'Copied ✓';
+  setTimeout(() => { els.linkCopy.textContent = 'Copy code'; }, 2500);
+});
 
 // ---- Rendering -----------------------------------------------------------------------------
 

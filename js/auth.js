@@ -5,18 +5,20 @@ const SCOPES = 'user-read-playback-state user-modify-playback-state user-read-cu
 // Spotify sends the user back to the folder this page is served from, e.g. http://127.0.0.1:8080/
 // or https://<username>.github.io/media-player/. Each one must be listed as a Redirect URI
 // in the Spotify dashboard, character for character (including the trailing slash).
-const REDIRECT_URI = new URL('.', location.href).href;
+export const REDIRECT_URI = new URL('.', location.href).href;
 const TOKEN_KEY = 'mp.token';
 const PKCE_KEY = 'mp.pkce';
 
 // The saved login is missing or no longer valid; the user has to connect again.
 export class AuthError extends Error {}
 
-export async function login() {
+// With forAnotherDevice, the login isn't kept here: handleRedirect() instead returns a code
+// to paste into a device where Spotify's login page doesn't work (e.g. an iPhone on iOS 15).
+export async function login({ forAnotherDevice = false } = {}) {
   const verifier = randomString(64);
   const state = randomString(16);
   const challenge = base64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
-  localStorage.setItem(PKCE_KEY, JSON.stringify({ verifier, state }));
+  localStorage.setItem(PKCE_KEY, JSON.stringify({ verifier, state, forAnotherDevice }));
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
     response_type: 'code',
@@ -32,6 +34,7 @@ export async function login() {
 }
 
 // Finishes a login if Spotify just redirected back here with ?code=… (or ?error=…).
+// Resolves to { codeForAnotherDevice } when the login was started for another device.
 export async function handleRedirect() {
   const params = new URLSearchParams(location.search);
   const code = params.get('code');
@@ -44,7 +47,16 @@ export async function handleRedirect() {
 
   if (error) throw new AuthError(error === 'access_denied' ? 'Spotify login was cancelled.' : `Spotify login failed: ${error}`);
   if (!pkce || params.get('state') !== pkce.state) throw new AuthError('That login link expired. Please try again.');
-  await requestToken({ grant_type: 'authorization_code', code, redirect_uri: REDIRECT_URI, code_verifier: pkce.verifier });
+  const fields = { grant_type: 'authorization_code', code, redirect_uri: REDIRECT_URI, code_verifier: pkce.verifier };
+  if (!pkce.forAnotherDevice) return void (await requestToken(fields));
+  // The code is the refresh token of a separate login, so this device's own login is untouched.
+  const token = await requestToken(fields, { save: false });
+  return { codeForAnotherDevice: token.refreshToken };
+}
+
+// Logs in with a code made by login({ forAnotherDevice: true }) on another device.
+export async function loginWithCode(code) {
+  await requestToken({ grant_type: 'refresh_token', refresh_token: code });
 }
 
 export function isLoggedIn() {
@@ -72,7 +84,7 @@ export async function getAccessToken() {
   return (await refreshing).accessToken;
 }
 
-async function requestToken(fields) {
+async function requestToken(fields, { save = true } = {}) {
   const res = await fetch('https://accounts.spotify.com/api/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -88,10 +100,10 @@ async function requestToken(fields) {
   const token = {
     accessToken: data.access_token,
     // Spotify may rotate the refresh token; keep the old one if it doesn't send a new one.
-    refreshToken: data.refresh_token || loadToken()?.refreshToken,
+    refreshToken: data.refresh_token || fields.refresh_token,
     expiresAt: Date.now() + (data.expires_in - 60) * 1000,
   };
-  saveToken(token);
+  if (save) saveToken(token);
   return token;
 }
 

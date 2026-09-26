@@ -188,20 +188,30 @@ button {
   color: var(--gray);
 }
 
-/* ---- Login ---- */
+/* ---- Login screens ---- */
 
-.login {
+.screen {
   position: fixed;
   inset: 0;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 22px;
-  padding: 24px calc(24px + env(safe-area-inset-right)) 24px calc(24px + env(safe-area-inset-left));
+  overflow-y: auto; /* short landscape screens can scroll instead of clipping */
+  padding: 24px calc(24px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) calc(24px + env(safe-area-inset-left));
   text-align: center;
 }
-.login h1 { font-size: 34px; font-weight: 700; }
+.panel, .stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+.panel {
+  width: 100%;
+  max-width: 480px;
+  margin: auto; /* centers, but still scrolls from the top when too tall */
+}
+.stack { width: 100%; }
+.screen h1 { font-size: 34px; font-weight: 700; }
+.screen h2 { font-size: 26px; font-weight: 700; }
 .connect {
   padding: 14px 34px;
   border-radius: 999px;
@@ -211,15 +221,57 @@ button {
   font-weight: 600;
 }
 .connect:active { opacity: 0.7; }
-.login-error,
-.install-hint {
-  max-width: 460px;
+.error,
+.hint,
+.steps {
   font-size: 15px;
   line-height: 1.45;
 }
-.login-error { color: #ff6961; }
-.install-hint { color: var(--gray); }
-.install-hint strong { color: #fff; font-weight: 600; }
+.error { color: #ff6961; }
+.hint,
+.steps { color: var(--gray); }
+.hint strong,
+.steps strong { color: #fff; font-weight: 600; }
+.steps {
+  text-align: left;
+  padding-left: 1.3em;
+}
+.steps li + li { margin-top: 6px; }
+.steps strong { overflow-wrap: anywhere; }
+.text-button {
+  color: var(--gray);
+  font-size: 15px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.code-row {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+.code-row .connect { padding: 12px 22px; }
+input, textarea {
+  min-width: 0;
+  border: 1px solid var(--track);
+  border-radius: 12px;
+  background: #1c1c1e;
+  color: #fff;
+  font: 16px/1.4 ui-monospace, Menlo, monospace; /* 16px stops iOS zooming in on focus */
+  -webkit-user-select: text;
+  user-select: text;
+}
+input {
+  flex: 1;
+  padding: 12px 14px;
+}
+textarea {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 13px;
+  resize: none;
+  word-break: break-all;
+}
 
 /* ---- Portrait: the player is designed for landscape ---- */
 

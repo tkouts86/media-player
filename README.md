@@ -34,3 +34,11 @@ The Client ID lives in `js/config.js`.
 3. Turn the phone sideways. Music plays on another device; this screen controls it.
 
 Long-press the album art to log out. Spotify requires logging in again every 6 months.
+
+### Older iPhones (iOS 15 and earlier)
+
+- **Spotify's login page may not work.** On the login screen, tap *Spotify login not working? Use
+  another device*. On a phone or computer where login works, open the site with `?link` at the end,
+  log in, tap **Copy code**, and paste the code on the older phone.
+- **The screen can't be kept awake automatically** (that needs iOS 16.4+). Set
+  Settings → Display & Brightness → Auto-Lock → **Never** on a phone used as a dedicated display.

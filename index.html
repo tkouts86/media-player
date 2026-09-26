@@ -47,14 +47,51 @@
     </section>
   </main>
 
-  <section id="login" class="login" hidden>
-    <h1>Media Player</h1>
-    <button id="connect" class="connect">Connect Spotify</button>
-    <p id="login-error" class="login-error" hidden></p>
-    <p id="install-hint" class="install-hint" hidden>
-      For full screen: tap <strong>Share</strong> → <strong>Add to Home Screen</strong>, then open
-      Media Player from your Home Screen and connect there.
-    </p>
+  <section id="login" class="screen" hidden>
+    <div class="panel">
+      <h1>Media Player</h1>
+      <button id="connect" class="connect">Connect Spotify</button>
+      <p id="login-error" class="error" hidden></p>
+      <p id="install-hint" class="hint" hidden>
+        For full screen: tap <strong>Share</strong> → <strong>Add to Home Screen</strong>, then open
+        Media Player from your Home Screen and connect there.
+      </p>
+      <button id="use-other-device" class="text-button">Spotify login not working? Use another device</button>
+    </div>
+  </section>
+
+  <!-- On the device that can't log in: paste a code made on another device. -->
+  <section id="link-receive" class="screen" hidden>
+    <div class="panel">
+      <h2>Log in using another device</h2>
+      <ol class="steps">
+        <li>On a phone or computer where Spotify login works, open <strong id="link-url"></strong></li>
+        <li>Log in there and tap <strong>Copy code</strong>.</li>
+        <li>Paste the code here. Apple devices on the same Apple ID share copy and paste; otherwise, text or AirDrop the code to yourself.</li>
+      </ol>
+      <form id="link-form" class="code-row">
+        <input id="link-input" placeholder="Paste code" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <button class="connect">Connect</button>
+      </form>
+      <p id="link-error" class="error" hidden></p>
+      <button id="link-back" class="text-button">Back</button>
+    </div>
+  </section>
+
+  <!-- On the device that can log in (opened with ?link): make that code. -->
+  <section id="link-send" class="screen" hidden>
+    <div class="panel">
+      <h2>Log in another device</h2>
+      <div id="link-send-start" class="stack">
+        <p class="hint">Log in to Spotify here to get a code for your other device. It won't change anything on this device.</p>
+        <button id="link-login" class="connect">Connect Spotify</button>
+      </div>
+      <div id="link-send-code" class="stack" hidden>
+        <p class="hint">Paste this code into Media Player on your other device. Keep it private, since it works like a password for your Spotify playback.</p>
+        <textarea id="link-code" rows="3" readonly></textarea>
+        <button id="link-copy" class="connect">Copy code</button>
+      </div>
+    </div>
   </section>
 
   <div class="rotate" aria-hidden="true">
