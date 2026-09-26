@@ -12,8 +12,8 @@ const PKCE_KEY = 'mp.pkce';
 // The saved login is missing or no longer valid; the user has to connect again.
 export class AuthError extends Error {}
 
-// With forAnotherDevice, the login isn't kept here: handleRedirect() instead returns a code
-// to paste into a device where Spotify's login page doesn't work (e.g. an iPhone on iOS 15).
+// With forAnotherDevice, the login isn't kept here: handleRedirect() instead returns it so it can
+// be handed to a device where Spotify's login page doesn't work (e.g. an iPhone on iOS 15).
 export async function login({ forAnotherDevice = false } = {}) {
   const verifier = randomString(64);
   const state = randomString(16);
@@ -34,7 +34,7 @@ export async function login({ forAnotherDevice = false } = {}) {
 }
 
 // Finishes a login if Spotify just redirected back here with ?code=… (or ?error=…).
-// Resolves to { codeForAnotherDevice } when the login was started for another device.
+// Resolves to { refreshTokenForAnotherDevice } when the login was started for another device.
 export async function handleRedirect() {
   const params = new URLSearchParams(location.search);
   const code = params.get('code');
@@ -49,14 +49,14 @@ export async function handleRedirect() {
   if (!pkce || params.get('state') !== pkce.state) throw new AuthError('That login link expired. Please try again.');
   const fields = { grant_type: 'authorization_code', code, redirect_uri: REDIRECT_URI, code_verifier: pkce.verifier };
   if (!pkce.forAnotherDevice) return void (await requestToken(fields));
-  // The code is the refresh token of a separate login, so this device's own login is untouched.
+  // This is a separate login from this device's own, which stays untouched.
   const token = await requestToken(fields, { save: false });
-  return { codeForAnotherDevice: token.refreshToken };
+  return { refreshTokenForAnotherDevice: token.refreshToken };
 }
 
-// Logs in with a code made by login({ forAnotherDevice: true }) on another device.
-export async function loginWithCode(code) {
-  await requestToken({ grant_type: 'refresh_token', refresh_token: code });
+// Logs in with a login made by login({ forAnotherDevice: true }) on another device.
+export async function loginWithRefreshToken(refreshToken) {
+  await requestToken({ grant_type: 'refresh_token', refresh_token: refreshToken });
 }
 
 export function isLoggedIn() {

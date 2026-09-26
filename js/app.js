@@ -2,50 +2,49 @@ import * as auth from './auth.js';
 import { spotify, ApiError } from './spotify.js';
 import { getLyrics } from './lyrics.js';
 import { demoApi, demoLyrics } from './demo.js';
+import * as link from './link.js';
+import { PlayerView, LyricsView } from './views.js';
+import { loadLayout, saveLayout, copyLayout, themeFor, albumColor } from './layout.js';
+import { paneSettings, backgroundSettings } from './editor.js';
 
 const isDemo = new URLSearchParams(location.search).has('demo');
 const api = isDemo ? demoApi : spotify;
 const findLyrics = isDemo ? demoLyrics : getLyrics;
-
-const LYRIC_LEAD_MS = 200;     // highlight a line slightly early so it feels on time
-const LYRIC_ANCHOR = 0.28;     // the active line sits this far down the lyrics pane
-const USER_SCROLL_HOLD_MS = 3000;
-const PLACEHOLDER_ART = 'data:image/svg+xml,' + encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#1c1c1e"/>' +
-  '<circle cx="40" cy="66" r="10" fill="#48484a"/><path d="M44 28h22v11H51v27h-7z" fill="#48484a"/></svg>');
+const LINK_CODE_TTL_MS = 10 * 60 * 1000;
 
 const $ = (id) => document.getElementById(id);
 const els = {
   login: $('login'), connect: $('connect'), loginError: $('login-error'), installHint: $('install-hint'),
   useOtherDevice: $('use-other-device'),
   linkReceive: $('link-receive'), linkUrl: $('link-url'), linkForm: $('link-form'), linkInput: $('link-input'),
-  linkError: $('link-error'), linkBack: $('link-back'),
+  linkSubmit: $('link-submit'), linkError: $('link-error'), linkBack: $('link-back'),
   linkSend: $('link-send'), linkSendStart: $('link-send-start'), linkSendCode: $('link-send-code'),
-  linkLogin: $('link-login'), linkCode: $('link-code'), linkCopy: $('link-copy'),
-  player: $('player'), art: $('art'), album: $('album'), artist: $('artist'),
-  progress: $('progress'), progressTrack: $('progress-track'), progressFill: $('progress-fill'),
-  prev: $('prev'), play: $('play'), next: $('next'),
-  lyrics: $('lyrics'), lines: $('lyrics-lines'), empty: $('lyrics-empty'),
-  emptyArt: $('lyrics-art'), emptyMessage: $('lyrics-message'), toast: $('toast'),
+  linkLogin: $('link-login'), linkCode: $('link-code'), linkStatus: $('link-status'), linkNew: $('link-new'),
+  player: $('player'), panes: $('panes'), paneSlots: [$('pane-0'), $('pane-1')],
+  menuButton: $('menu-button'), saveButton: $('save-button'), cancelButton: $('cancel-button'),
+  menu: $('menu'), bgFrame: $('bg-frame'), toast: $('toast'),
 };
 const screens = [els.login, els.linkReceive, els.linkSend, els.player];
+const portrait = matchMedia('(orientation: portrait)');
 
 // Latest known playback, or null when nothing is playing. Progress between polls is
 // estimated locally from progressMs + time since fetchedAt.
 let playback = null;
 let lyrics;              // undefined while loading, null when none were found
-let activeLine = -1;
-let autoScrolledTo = -2; // line the pane was last scrolled to; -2 forces a re-scroll
-let userScrollUntil = 0;
-let dragPosition = null; // ms under the finger while scrubbing the progress bar
+let views = [];          // what the panes currently show
+let albumBackground = '#000000';
+
+let layout = loadLayout();
+let draft = null;        // copy of the layout being edited
+let editing = null;      // null, a pane index (0/1) or 'background'
+let settings = null;     // the open settings panel: { el, refresh }
 
 let running = false;
 let pollTimer = 0;
 let version = 0;         // bumped around each command so stale poll results are dropped
 
-start();
-
 async function start() {
+  renderLayout();
   if (isDemo) return showPlayer();
   let result;
   try {
@@ -53,7 +52,7 @@ async function start() {
   } catch (err) {
     return showLogin(err.message);
   }
-  if (result?.codeForAnotherDevice) showLinkSend(result.codeForAnotherDevice);
+  if (result?.refreshTokenForAnotherDevice) showLinkSend(result.refreshTokenForAnotherDevice);
   else if (new URLSearchParams(location.search).has('link')) showLinkSend();
   else if (auth.isLoggedIn()) showPlayer();
   else showLogin();
@@ -61,7 +60,6 @@ async function start() {
 
 function showScreen(screen) {
   for (const s of screens) s.hidden = s !== screen;
-  document.body.classList.toggle('in-player', screen === els.player);
   if (screen !== els.player) {
     running = false;
     clearTimeout(pollTimer);
@@ -79,8 +77,7 @@ function showLogin(error) {
 function showPlayer() {
   showScreen(els.player);
   running = true;
-  renderInfo();
-  renderLyrics();
+  updateViews();
   keepAwake();
   poll();
 }
@@ -132,18 +129,24 @@ function handleError(err) {
 function normalize(data) {
   const item = data?.item;
   if (!item) return null;
+  const isEpisode = data.currently_playing_type === 'episode' || item.type === 'episode';
   const artists = item.artists?.map((a) => a.name) ?? [];
+  const year = (isEpisode ? item.release_date : item.album?.release_date)?.slice(0, 4);
   return {
     id: item.id ?? item.uri,
     name: item.name,
-    album: item.album?.name ?? item.show?.name ?? '',
-    artist: artists.length ? artists.join(', ') : item.name,
+    album: item.album?.name ?? '',
     firstArtist: artists[0] ?? '',
-    art: (item.album?.images ?? item.images)?.[0]?.url ?? null,
+    // The main text is the album name for songs and the episode title for podcasts;
+    // the secondary text is the artists or the podcast's name.
+    title: isEpisode ? item.name : item.album?.name || item.name,
+    subtitle: isEpisode ? item.show?.name ?? '' : artists.join(', '),
+    year: year && year !== '0000' ? year : '',
+    art: (item.album?.images ?? item.images ?? item.show?.images)?.[0]?.url ?? null,
     durationMs: item.duration_ms,
     progressMs: data.progress_ms ?? 0,
     isPlaying: data.is_playing,
-    isEpisode: data.currently_playing_type === 'episode',
+    isEpisode,
     fetchedAt: performance.now(),
   };
 }
@@ -156,9 +159,31 @@ function currentProgress() {
 
 function setPlayback(next) {
   const trackChanged = next?.id !== playback?.id;
+  const artChanged = next?.art !== playback?.art;
   playback = next;
-  renderInfo();
+  updateViews();
   if (trackChanged) loadLyrics(next);
+  if (artChanged) updateAlbumBackground();
+}
+
+async function loadLyrics(track) {
+  lyrics = undefined;
+  updateViews();
+  if (!track) return;
+  let result = null;
+  if (!track.isEpisode) {
+    try {
+      result = await findLyrics(track);
+    } catch {}
+  }
+  if (playback?.id !== track.id) return; // the song changed while we were waiting
+  lyrics = result;
+  updateViews();
+}
+
+function updateViews() {
+  for (const view of views) view.update(playback, lyrics);
+  settings?.refresh();
 }
 
 // ---- Controls ------------------------------------------------------------------------------
@@ -167,7 +192,7 @@ async function command(action, optimisticUpdate) {
   if (!playback) return;
   version++;
   optimisticUpdate?.();
-  renderInfo();
+  updateViews();
   try {
     await action();
   } catch (err) {
@@ -194,67 +219,177 @@ function seekTo(ms) {
   });
 }
 
-els.play.addEventListener('click', () => {
-  if (!playback) return;
-  const wasPlaying = playback.isPlaying;
-  command(() => (wasPlaying ? api.pause() : api.play()), () => {
-    playback.progressMs = currentProgress();
-    playback.fetchedAt = performance.now();
-    playback.isPlaying = !wasPlaying;
-  });
-});
-
-els.next.addEventListener('click', () => command(() => api.next()));
-
-// Like Spotify's own apps: restart the song unless it only just started.
-els.prev.addEventListener('click', () => {
-  if (currentProgress() > 3000) seekTo(0);
-  else command(() => api.previous());
-});
-
-els.progress.addEventListener('pointerdown', (e) => {
-  if (!playback) return;
-  els.progress.setPointerCapture(e.pointerId);
-  dragPosition = positionFromPointer(e);
-});
-els.progress.addEventListener('pointermove', (e) => {
-  if (dragPosition != null) dragPosition = positionFromPointer(e);
-});
-els.progress.addEventListener('pointerup', () => {
-  if (dragPosition == null) return;
-  const target = dragPosition;
-  dragPosition = null;
-  seekTo(target);
-});
-els.progress.addEventListener('pointercancel', () => { dragPosition = null; });
-
-function positionFromPointer(e) {
-  const rect = els.progressTrack.getBoundingClientRect();
-  const fraction = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-  return fraction * playback.durationMs;
-}
-
-// Long-press the album art to log out (kept hidden so the screen stays uncluttered).
-let pressTimer = 0;
-els.art.addEventListener('pointerdown', () => {
-  clearTimeout(pressTimer);
-  pressTimer = setTimeout(() => {
+const actions = {
+  togglePlay() {
+    if (!playback) return;
+    const wasPlaying = playback.isPlaying;
+    command(() => (wasPlaying ? api.pause() : api.play()), () => {
+      playback.progressMs = currentProgress();
+      playback.fetchedAt = performance.now();
+      playback.isPlaying = !wasPlaying;
+    });
+  },
+  next: () => command(() => api.next()),
+  // Like Spotify's own apps: restart the song unless it only just started.
+  previous() {
+    if (currentProgress() > 3000) seekTo(0);
+    else command(() => api.previous());
+  },
+  seek: seekTo,
+  logout() {
     if (!isDemo && confirm('Log out of Spotify?')) {
       auth.logout();
       showLogin();
     }
-  }, 800);
-});
-for (const type of ['pointerup', 'pointerleave', 'pointercancel']) {
-  els.art.addEventListener(type, () => clearTimeout(pressTimer));
-}
-els.art.addEventListener('contextmenu', (e) => e.preventDefault());
+  },
+};
 
 els.connect.addEventListener('click', () => auth.login());
 
+// ---- Panes and background ------------------------------------------------------------------
+
+// Sizes inside a pane are in units of its height (capped for narrow panes), set as --u.
+const paneSizer = new ResizeObserver((entries) => {
+  for (const { target } of entries) {
+    target.style.setProperty('--u', `${Math.min(target.clientHeight, target.clientWidth * 1.2) / 100}px`);
+  }
+});
+els.paneSlots.forEach((slot) => paneSizer.observe(slot));
+
+function paneName(index) {
+  return (portrait.matches ? ['Top pane', 'Bottom pane'] : ['Left pane', 'Right pane'])[index];
+}
+
+// Fills each pane slot from the layout being shown (the draft while editing).
+function renderLayout() {
+  const shown = draft ?? layout;
+  for (const view of views) view.destroy();
+  views = [];
+
+  els.paneSlots.forEach((slot, i) => {
+    slot.hidden = false;
+    if (editing === 'background') return slot.replaceChildren(); // panes hide while picking a colour
+    if (editing === 1 - i) {
+      // This slot hosts the settings for the other pane. Leave it in place if it's already
+      // there, so its scroll position survives.
+      if (slot.firstChild !== settings.el) slot.replaceChildren(settings.el);
+      return;
+    }
+    const pane = shown.panes[i];
+    if (!pane.on) {
+      slot.replaceChildren();
+      if (editing === i) slot.append(offMessage(i));
+      else slot.hidden = true;
+      return;
+    }
+    const view = pane.type === 'player' ? new PlayerView(pane.show, actions) : new LyricsView(actions);
+    slot.replaceChildren(view.el);
+    views.push(view);
+  });
+
+  els.panes.classList.toggle('single', els.paneSlots.filter((slot) => !slot.hidden).length === 1);
+  for (const view of views) view.update(playback, lyrics);
+  applyTheme();
+}
+
+function offMessage(index) {
+  const el = document.createElement('p');
+  el.className = 'pane-off';
+  el.textContent = `${paneName(index)} is off`;
+  return el;
+}
+
+function applyTheme() {
+  const { mode, color } = (draft ?? layout).background;
+  const theme = themeFor(mode === 'album' ? albumBackground : color);
+  for (const [name, value] of Object.entries(theme)) els.player.style.setProperty(name, value);
+}
+
+async function updateAlbumBackground() {
+  const url = playback?.art;
+  let color = '#000000';
+  if (url) {
+    try {
+      color = await albumColor(url);
+    } catch {}
+  }
+  if (playback?.art !== url) return;
+  albumBackground = color;
+  applyTheme();
+}
+
+portrait.addEventListener('change', () => {
+  settings?.refresh();
+  for (const el of els.panes.querySelectorAll('.pane-off')) el.replaceWith(offMessage(Number(el.parentNode.id.slice(-1))));
+});
+
+// ---- Editing -------------------------------------------------------------------------------
+
+els.menuButton.addEventListener('click', () => {
+  if (!els.menu.hidden) return closeMenu();
+  els.menu.querySelector('[data-edit="0"]').textContent = `Edit ${paneName(0).toLowerCase()}`;
+  els.menu.querySelector('[data-edit="1"]').textContent = `Edit ${paneName(1).toLowerCase()}`;
+  els.menu.hidden = false;
+});
+
+function closeMenu() {
+  els.menu.hidden = true;
+}
+
+document.addEventListener('pointerdown', (e) => {
+  if (!els.menu.hidden && !els.menu.contains(e.target) && !els.menuButton.contains(e.target)) closeMenu();
+});
+
+els.menu.addEventListener('click', (e) => {
+  const item = e.target.closest('[data-edit]');
+  if (!item) return;
+  closeMenu();
+  const target = item.dataset.edit === 'background' ? 'background' : Number(item.dataset.edit);
+  startEditing(target);
+});
+
+function startEditing(target) {
+  editing = target;
+  draft = copyLayout(layout);
+  if (target === 'background') {
+    settings = backgroundSettings(draft, () => playback?.art, renderLayout);
+    els.bgFrame.replaceChildren(settings.el);
+    els.bgFrame.hidden = false;
+  } else {
+    settings = paneSettings(draft, target, paneName, renderLayout);
+  }
+  setEditingToolbar(true);
+  renderLayout();
+}
+
+function finishEditing(save) {
+  if (save) {
+    layout = draft;
+    saveLayout(layout);
+  } else if (JSON.stringify(draft) !== JSON.stringify(layout) && !confirm('Discard your changes?')) {
+    return;
+  }
+  draft = null;
+  editing = null;
+  settings = null;
+  els.bgFrame.hidden = true;
+  els.bgFrame.replaceChildren();
+  setEditingToolbar(false);
+  renderLayout();
+}
+
+function setEditingToolbar(on) {
+  els.menuButton.hidden = on;
+  els.saveButton.hidden = !on;
+  els.cancelButton.hidden = !on;
+}
+
+els.saveButton.addEventListener('click', () => finishEditing(true));
+els.cancelButton.addEventListener('click', () => finishEditing(false));
+
 // ---- Logging in via another device ---------------------------------------------------------
 // For phones where Spotify's own login page doesn't work (e.g. an iPhone 7 on iOS 15): log in
-// on a device where it does, then paste the code it shows.
+// on a device where it does, which shows a 6-digit code to type in here.
 
 els.useOtherDevice.addEventListener('click', () => {
   showScreen(els.linkReceive);
@@ -265,165 +400,76 @@ els.linkBack.addEventListener('click', () => showLogin());
 
 els.linkForm.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const code = els.linkInput.value.replace(/\s+/g, ''); // texting a code can add line breaks
-  if (!code) return;
+  const code = els.linkInput.value.replace(/\D/g, '');
+  if (code.length !== 6) return showLinkError('Enter the 6-digit code shown on your other device.');
   els.linkError.hidden = true;
+  els.linkSubmit.disabled = true;
+  els.linkSubmit.textContent = 'Connecting…';
   try {
-    await auth.loginWithCode(code);
+    await auth.loginWithRefreshToken(await link.receiveLogin(code));
   } catch (err) {
-    els.linkError.textContent = err instanceof auth.AuthError
-      ? "That code didn't work. Make a new one on the other device and paste it again."
-      : "Couldn't reach Spotify. Check the internet connection and try again.";
-    els.linkError.hidden = false;
-    return;
+    return showLinkError(
+      err instanceof link.NoAnswerError ? 'No device answered. Check the code, and make sure the other device is still showing it.'
+        : err instanceof auth.AuthError ? "Spotify didn't accept that login. Make a new code on the other device and try again."
+        : "Couldn't connect. Check the internet connection and try again.");
+  } finally {
+    els.linkSubmit.disabled = false;
+    els.linkSubmit.textContent = 'Connect';
   }
   els.linkInput.value = '';
   showPlayer();
 });
 
-function showLinkSend(code) {
+function showLinkError(message) {
+  els.linkError.textContent = message;
+  els.linkError.hidden = false;
+}
+
+// On the device where login works: after logging in "for another device", show a code.
+let offer = null;
+let offerTimer = 0;
+let offerToken = null;
+
+function showLinkSend(refreshToken) {
   showScreen(els.linkSend);
-  els.linkSendStart.hidden = !!code;
-  els.linkSendCode.hidden = !code;
-  els.linkCode.value = code || '';
+  els.linkSendStart.hidden = !!refreshToken;
+  els.linkSendCode.hidden = !refreshToken;
+  if (refreshToken) {
+    offerToken = refreshToken;
+    startOffer();
+  }
+}
+
+async function startOffer() {
+  offer?.stop();
+  clearTimeout(offerTimer);
+  let sent = false;
+  els.linkStatus.textContent = 'Waiting for your other device…';
+  els.linkNew.hidden = true;
+  offer = await link.offerLogin(offerToken, () => {
+    sent = true;
+    els.linkStatus.textContent = 'Sent! Your other device is logging in.';
+  });
+  els.linkCode.textContent = `${offer.code.slice(0, 3)} ${offer.code.slice(3)}`;
+  offerTimer = setTimeout(() => {
+    offer.stop();
+    if (sent) return;
+    els.linkCode.textContent = '––– –––';
+    els.linkStatus.textContent = 'This code expired.';
+    els.linkNew.hidden = false;
+  }, LINK_CODE_TTL_MS);
 }
 
 els.linkLogin.addEventListener('click', () => auth.login({ forAnotherDevice: true }));
+els.linkNew.addEventListener('click', startOffer);
 
-els.linkCopy.addEventListener('click', async () => {
-  try {
-    await navigator.clipboard.writeText(els.linkCode.value);
-  } catch {
-    els.linkCode.select();
-    document.execCommand('copy');
-  }
-  els.linkCopy.textContent = 'Copied ✓';
-  setTimeout(() => { els.linkCopy.textContent = 'Copy code'; }, 2500);
-});
+// ---- Every frame ---------------------------------------------------------------------------
 
-// ---- Rendering -----------------------------------------------------------------------------
-
-function renderInfo() {
-  const p = playback;
-  setText(els.album, p ? p.album : 'Nothing playing');
-  setText(els.artist, p ? p.artist : 'Start playing on any device');
-  setImage(els.art, p?.art);
-  setImage(els.emptyArt, p?.art);
-  els.play.classList.toggle('playing', !!p?.isPlaying);
-  els.play.setAttribute('aria-label', p?.isPlaying ? 'Pause' : 'Play');
-  for (const button of [els.prev, els.play, els.next]) button.disabled = !p;
-}
-
-function setText(el, text) {
-  if (el.textContent !== text) el.textContent = text;
-}
-
-function setImage(img, url) {
-  const src = url || PLACEHOLDER_ART;
-  if (img.getAttribute('src') !== src) img.src = src;
-}
-
-async function loadLyrics(track) {
-  lyrics = undefined;
-  renderLyrics();
-  if (!track) return;
-  let result = null;
-  if (!track.isEpisode) {
-    try {
-      result = await findLyrics(track);
-    } catch {}
-  }
-  if (playback?.id !== track.id) return; // the song changed while we were waiting
-  lyrics = result;
-  renderLyrics();
-}
-
-function renderLyrics() {
-  activeLine = -1;
-  autoScrolledTo = -2;
-  els.lines.replaceChildren();
-  els.lyrics.scrollTop = 0;
-
-  const showEmpty = !!playback && lyrics !== undefined && !lyrics?.lines.length;
-  els.empty.hidden = !showEmpty;
-  els.lines.hidden = showEmpty;
-  els.lyrics.classList.toggle('empty', showEmpty);
-  if (showEmpty) {
-    els.emptyMessage.textContent = lyrics?.instrumental ? 'Instrumental' : 'No lyrics available';
-    return;
-  }
-  if (!playback || !lyrics) return;
-
-  els.lines.classList.toggle('synced', lyrics.synced);
-  els.lines.append(...lyrics.lines.map((line, i) => {
-    const el = document.createElement('div');
-    if (!lyrics.synced && !line.text) {
-      el.className = 'gap'; // blank line between verses
-      return el;
-    }
-    el.className = 'line';
-    el.textContent = line.text || '♪';
-    el.dataset.index = i;
-    return el;
-  }));
-}
-
-// Tap a line to jump to that point in the song.
-els.lyrics.addEventListener('click', (e) => {
-  const el = e.target.closest('.line');
-  if (!el || !lyrics?.synced) return;
-  userScrollUntil = 0;
-  autoScrolledTo = -2;
-  seekTo(lyrics.lines[el.dataset.index].time);
-});
-
-// While the user scrolls the lyrics, pause auto-scrolling; snap back shortly after.
-els.lyrics.addEventListener('touchstart', () => { userScrollUntil = Infinity; }, { passive: true });
-for (const type of ['touchend', 'touchcancel', 'wheel']) {
-  els.lyrics.addEventListener(type, () => {
-    userScrollUntil = performance.now() + USER_SCROLL_HOLD_MS;
-    autoScrolledTo = -2;
-  }, { passive: true });
-}
-
-function syncLyrics(position) {
-  const lines = lyrics.lines;
-  let lo = 0;
-  let hi = lines.length - 1;
-  let index = -1;
-  while (lo <= hi) { // last line whose time has been reached
-    const mid = (lo + hi) >> 1;
-    if (lines[mid].time <= position + LYRIC_LEAD_MS) {
-      index = mid;
-      lo = mid + 1;
-    } else {
-      hi = mid - 1;
-    }
-  }
-  if (index !== activeLine) {
-    els.lines.children[activeLine]?.classList.remove('active');
-    els.lines.children[index]?.classList.add('active');
-    activeLine = index;
-  }
-  if (autoScrolledTo !== activeLine && performance.now() > userScrollUntil) {
-    const el = els.lines.children[activeLine];
-    const top = el ? el.offsetTop - els.lyrics.clientHeight * LYRIC_ANCHOR : 0;
-    els.lyrics.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
-    autoScrolledTo = activeLine;
-  }
-}
-
-let lastFill = -1;
 function frame() {
   requestAnimationFrame(frame);
   if (!running) return;
-  const fraction = playback ? (dragPosition ?? currentProgress()) / playback.durationMs : 0;
-  const rounded = Math.round(fraction * 2000) / 2000;
-  if (rounded !== lastFill) {
-    els.progressFill.style.transform = `scaleX(${rounded})`;
-    lastFill = rounded;
-  }
-  if (playback && lyrics?.synced) syncLyrics(currentProgress());
+  const position = currentProgress();
+  for (const view of views) view.tick(position);
 }
 requestAnimationFrame(frame);
 
@@ -456,3 +502,5 @@ function toast(message) {
 function isIOS() {
   return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
+
+start(); // last, so everything above is set up first

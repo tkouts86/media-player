@@ -8,14 +8,14 @@ const art = (from, to) => 'data:image/svg+xml,' + encodeURIComponent(
 
 const tracks = [
   {
-    id: 'demo-1', name: 'Demo Song', album: 'Album Name', artists: ['Artist'],
+    id: 'demo-1', name: 'Demo Song', album: 'Album Name', artists: ['Artist'], released: '1972-11-01',
     art: art('#f2994a', '#eb5757'), durationMs: 66000,
     lyrics: {
       synced: true,
       lines: [
         [4000, 'This is a demo of Media Player'],
-        [8000, 'The line playing right now turns white'],
-        [12500, 'Everything before and after stays gray'],
+        [8000, 'The line playing right now is highlighted'],
+        [12500, 'Everything before and after stays dimmed'],
         [17000, 'Tap any line to jump straight to it'],
         [22000, 'Long lines wrap onto a second row, just like this one does on a phone'],
         [28000, ''],
@@ -30,11 +30,16 @@ const tracks = [
     },
   },
   {
-    id: 'demo-2', name: 'Second Song', album: 'A Much Longer Album Name That Will Not Fit', artists: ['Another Artist', 'Featured Guest'],
+    id: 'demo-2', name: 'Second Song', album: 'A Much Longer Album Name That Needs Two Lines Before It Gets Cut Off',
+    artists: ['Another Artist', 'Featured Guest'], released: '2019',
     art: art('#56ccf2', '#2f80ed'), durationMs: 40000, lyrics: null,
   },
   {
-    id: 'demo-3', name: 'Quiet Song', album: 'Instrumentals', artists: ['Artist'],
+    id: 'demo-ep', episode: true, name: 'Episode 12: The Episode Title', show: 'Podcast Name', released: '2026-09-20',
+    art: art('#bb6bd9', '#6c3483'), durationMs: 35000, lyrics: null,
+  },
+  {
+    id: 'demo-3', name: 'Quiet Song', album: 'Instrumentals', artists: ['Artist'], released: '2008',
     art: art('#6fcf97', '#219653'), durationMs: 30000, lyrics: { instrumental: true, synced: false, lines: [] },
   },
 ];
@@ -56,15 +61,17 @@ export const demoApi = {
   async getPlayback() {
     while (now() >= tracks[index].durationMs) jump((index + 1) % tracks.length, now() - tracks[index].durationMs);
     const t = tracks[index];
+    const item = t.episode
+      ? { type: 'episode', id: t.id, name: t.name, duration_ms: t.durationMs, release_date: t.released,
+          images: [{ url: t.art }], show: { name: t.show } }
+      : { type: 'track', id: t.id, name: t.name, duration_ms: t.durationMs,
+          album: { name: t.album, release_date: t.released, images: [{ url: t.art }] },
+          artists: t.artists.map((name) => ({ name })) };
     return {
       is_playing: playing,
       progress_ms: now(),
-      currently_playing_type: 'track',
-      item: {
-        id: t.id, name: t.name, duration_ms: t.durationMs,
-        album: { name: t.album, images: [{ url: t.art }] },
-        artists: t.artists.map((name) => ({ name })),
-      },
+      currently_playing_type: item.type,
+      item,
     };
   },
   async play() { jump(index, now()); playing = true; },
