@@ -1,0 +1,269 @@
+/* Sizes are in units of screen height (--u) so the layout scales with the phone,
+   using the small-viewport height so nothing is cut off behind Safari's toolbars. */
+:root {
+  --u: 1vh;
+  --gray: #8e8e93;
+  --dim: rgba(255, 255, 255, 0.42);
+  --track: #3a3a3c;
+  --font: "Avenir Next", Avenir, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color-scheme: dark;
+}
+@supports (height: 1svh) {
+  :root { --u: 1svh; }
+}
+
+* { box-sizing: border-box; margin: 0; }
+[hidden] { display: none !important; }
+
+html, body {
+  height: 100%;
+  background: #000;
+  color: #fff;
+  font-family: var(--font);
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+/* ---- Player layout: now playing on the left, lyrics on the right ---- */
+
+.player {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 52.5fr 47.5fr;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+}
+
+.now-playing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.art {
+  width: calc(22 * var(--u));
+  height: calc(22 * var(--u));
+  border-radius: calc(1.2 * var(--u));
+  object-fit: cover;
+  background: #1c1c1e;
+  -webkit-touch-callout: none;
+}
+
+.album, .artist {
+  width: 72%;
+  text-align: center;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.album {
+  margin-top: calc(3.5 * var(--u));
+  font-size: calc(6 * var(--u));
+  font-weight: 500;
+}
+.artist {
+  margin-top: calc(2.4 * var(--u));
+  font-size: calc(5.4 * var(--u));
+  color: var(--gray);
+}
+
+.progress {
+  width: 72%;
+  margin-top: calc(3 * var(--u));
+  padding: calc(2.5 * var(--u)) 0; /* bigger touch target than the visible bar */
+  cursor: pointer;
+  touch-action: none;
+}
+.progress-track {
+  height: calc(1.6 * var(--u));
+  border-radius: 999px;
+  background: var(--track);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: #fff;
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+.controls {
+  width: 66%;
+  margin-top: calc(1.7 * var(--u));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.control {
+  display: grid;
+  place-items: center;
+  height: calc(12 * var(--u));
+  min-width: 44px;
+  transition: transform 0.12s, opacity 0.12s;
+}
+.control:active { transform: scale(0.88); opacity: 0.6; }
+.control:disabled { opacity: 0.3; }
+.control svg { display: block; }
+.skip svg { width: calc(12.5 * var(--u)); height: calc(7.1 * var(--u)); }
+.play svg { width: calc(8.3 * var(--u)); height: calc(9.6 * var(--u)); }
+.play .icon-pause,
+.play.playing .icon-play { display: none; }
+.play.playing .icon-pause { display: block; }
+
+/* ---- Lyrics ---- */
+
+.lyrics {
+  position: relative; /* offsetTop of lines is measured from here */
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  padding-right: 3vw;
+  -webkit-mask-image: linear-gradient(transparent, #000 5%, #000 93%, transparent);
+  mask-image: linear-gradient(transparent, #000 5%, #000 93%, transparent);
+}
+.lyrics::-webkit-scrollbar { display: none; }
+.lyrics.empty {
+  overflow: hidden;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.lyrics-lines {
+  /* Room above and below so the first and last lines can reach the highlight position. */
+  padding: calc(28 * var(--u)) 0 calc(62 * var(--u));
+}
+.line {
+  padding: calc(0.4 * var(--u)) 0;
+  font-size: calc(6.8 * var(--u));
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--dim);
+  overflow-wrap: break-word;
+  transition: color 0.35s;
+}
+.line.active,
+.lyrics-lines:not(.synced) .line { color: #fff; }
+.synced .line { cursor: pointer; } /* also needed for iOS to deliver taps */
+.gap { height: calc(4 * var(--u)); }
+
+.lyrics-empty {
+  position: absolute;
+  inset: 0 3vw calc(env(safe-area-inset-bottom)) 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(3.5 * var(--u));
+}
+.lyrics-art {
+  width: min(calc(56 * var(--u)), 80%);
+  aspect-ratio: 1;
+  border-radius: calc(2 * var(--u));
+  object-fit: cover;
+  background: #1c1c1e;
+}
+.lyrics-empty p {
+  font-size: calc(4.6 * var(--u));
+  font-weight: 600;
+  color: var(--gray);
+}
+
+/* ---- Login ---- */
+
+.login {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 24px calc(24px + env(safe-area-inset-right)) 24px calc(24px + env(safe-area-inset-left));
+  text-align: center;
+}
+.login h1 { font-size: 34px; font-weight: 700; }
+.connect {
+  padding: 14px 34px;
+  border-radius: 999px;
+  background: #fff;
+  color: #000;
+  font-size: 18px;
+  font-weight: 600;
+}
+.connect:active { opacity: 0.7; }
+.login-error,
+.install-hint {
+  max-width: 460px;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.login-error { color: #ff6961; }
+.install-hint { color: var(--gray); }
+.install-hint strong { color: #fff; font-weight: 600; }
+
+/* ---- Portrait: the player is designed for landscape ---- */
+
+.rotate { display: none; }
+@media (orientation: portrait) {
+  body.in-player .rotate {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    background: #000;
+    color: var(--gray);
+    font-size: 17px;
+  }
+  .rotate svg { animation: turn 2.4s ease-in-out infinite; }
+}
+@keyframes turn {
+  0%, 25% { transform: rotate(0); }
+  55%, 100% { transform: rotate(-90deg); }
+}
+
+/* ---- Toast ---- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 20;
+  max-width: 80vw;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: #2c2c2e;
+  font-size: 15px;
+  text-align: center;
+  opacity: 0;
+  transform: translate(-50%, 16px);
+  transition: opacity 0.25s, transform 0.25s;
+  pointer-events: none;
+}
+.toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}

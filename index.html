@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#000000">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Media Player">
+  <title>Media Player</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <main id="player" class="player" hidden>
+    <section class="now-playing">
+      <img id="art" class="art" alt="Album art" draggable="false">
+      <div id="album" class="album"></div>
+      <div id="artist" class="artist"></div>
+      <div id="progress" class="progress" aria-label="Song position">
+        <div id="progress-track" class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+      </div>
+      <div class="controls">
+        <button id="prev" class="control skip" aria-label="Previous">
+          <svg viewBox="0 0 46 26" aria-hidden="true"><path d="M22 3 3 13l19 10zM43 3 24 13l19 10z" fill="currentColor" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>
+        </button>
+        <button id="play" class="control play" aria-label="Play">
+          <svg class="icon-play" viewBox="0 0 26 30" aria-hidden="true"><path d="M4 3v24l20-12z" fill="currentColor" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>
+          <svg class="icon-pause" viewBox="0 0 26 30" aria-hidden="true"><rect x="3" y="3" width="7" height="24" rx="2" fill="currentColor"/><rect x="16" y="3" width="7" height="24" rx="2" fill="currentColor"/></svg>
+        </button>
+        <button id="next" class="control skip" aria-label="Next">
+          <svg viewBox="0 0 46 26" aria-hidden="true"><path d="M24 3 43 13 24 23zM3 3l19 10L3 23z" fill="currentColor" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <section id="lyrics" class="lyrics" aria-label="Lyrics">
+      <div id="lyrics-lines" class="lyrics-lines"></div>
+      <div id="lyrics-empty" class="lyrics-empty" hidden>
+        <img id="lyrics-art" class="lyrics-art" alt="" draggable="false">
+        <p id="lyrics-message">No lyrics available</p>
+      </div>
+    </section>
+  </main>
+
+  <section id="login" class="login" hidden>
+    <h1>Media Player</h1>
+    <button id="connect" class="connect">Connect Spotify</button>
+    <p id="login-error" class="login-error" hidden></p>
+    <p id="install-hint" class="install-hint" hidden>
+      For full screen: tap <strong>Share</strong> → <strong>Add to Home Screen</strong>, then open
+      Media Player from your Home Screen and connect there.
+    </p>
+  </section>
+
+  <div class="rotate" aria-hidden="true">
+    <svg viewBox="0 0 48 48" width="56" height="56"><rect x="14" y="4" width="20" height="40" rx="4" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M21 38h6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+    <p>Turn your phone sideways</p>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
