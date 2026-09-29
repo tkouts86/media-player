@@ -36,6 +36,13 @@ The Client ID lives in `js/config.js`.
 
 Long-press the album art to log out. Spotify requires logging in again every 6 months.
 
+## Updates
+
+After a push, open phones pick up the new version the next time the app comes back on screen,
+or within 30 minutes if it's left on (never in the middle of editing settings). The **…** menu
+shows when the running version was published. `sw.js` makes sure a reload fetches the new files
+instead of cached ones.
+
 ## Customizing
 
 Tap **…** (top left) to edit the left pane, the right pane, or the background. Changes preview live;

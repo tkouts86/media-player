@@ -22,7 +22,7 @@ const els = {
   linkLogin: $('link-login'), linkCode: $('link-code'), linkStatus: $('link-status'), linkNew: $('link-new'),
   player: $('player'), panes: $('panes'), paneSlots: [$('pane-0'), $('pane-1')],
   menuButton: $('menu-button'), saveButton: $('save-button'), cancelButton: $('cancel-button'),
-  menu: $('menu'), bgFrame: $('bg-frame'), toast: $('toast'),
+  menu: $('menu'), menuVersion: $('menu-version'), bgFrame: $('bg-frame'), toast: $('toast'),
 };
 const screens = [els.login, els.linkReceive, els.linkSend, els.player];
 const portrait = matchMedia('(orientation: portrait)');
@@ -80,6 +80,7 @@ function showPlayer() {
   updateViews();
   keepAwake();
   poll();
+  checkForUpdate();
 }
 
 // ---- Polling -------------------------------------------------------------------------------
@@ -328,6 +329,9 @@ els.menuButton.addEventListener('click', () => {
   if (!els.menu.hidden) return closeMenu();
   els.menu.querySelector('[data-edit="0"]').textContent = `Edit ${paneName(0).toLowerCase()}`;
   els.menu.querySelector('[data-edit="1"]').textContent = `Edit ${paneName(1).toLowerCase()}`;
+  // Shows which version is running, to check that an update arrived.
+  els.menuVersion.textContent = Number.isNaN(loadedVersion) ? '' : `Updated ${new Date(loadedVersion)
+    .toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
   els.menu.hidden = false;
 });
 
@@ -488,6 +492,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden || !running) return;
   keepAwake();
   poll();
+  checkForUpdate();
 });
 
 let toastTimer = 0;
@@ -501,5 +506,39 @@ function toast(message) {
 function isIOS() {
   return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
+
+// ---- Updates -------------------------------------------------------------------------------
+// Reopening a Home Screen app (on iOS 15 especially) resumes the old page instead of reloading
+// it, so a new version never shows up. GitHub Pages stamps every file of a deploy with the same
+// Last-Modified time: when the server's is newer than this page's, reload. The service worker
+// (sw.js) makes that reload fetch the new files rather than cached ones.
+
+const UPDATE_CHECK_MS = 30 * 60 * 1000;
+let loadedVersion = Date.parse(document.lastModified); // NaN if the browser can't tell
+
+async function checkForUpdate() {
+  if (!running || editing !== null || document.hidden) return; // never lose unsaved edits
+  let serverVersion;
+  try {
+    const res = await fetch('./', { method: 'HEAD', cache: 'no-store' });
+    serverVersion = Date.parse(res.headers.get('Last-Modified'));
+  } catch {
+    return;
+  }
+  if (Number.isNaN(serverVersion)) return;
+  if (Number.isNaN(loadedVersion) || serverVersion <= loadedVersion) {
+    loadedVersion = serverVersion; // up to date (this also corrects an odd document.lastModified)
+    return;
+  }
+  // Reload once per new version, so a clock or parsing quirk can't cause a reload loop.
+  try {
+    if (sessionStorage.getItem('mp.reloadedFor') === String(serverVersion)) return;
+    sessionStorage.setItem('mp.reloadedFor', String(serverVersion));
+  } catch {}
+  location.reload();
+}
+
+setInterval(checkForUpdate, UPDATE_CHECK_MS); // for a screen that's left on all day
+navigator.serviceWorker?.register('sw.js').catch(() => {});
 
 start(); // last, so everything above is set up first
