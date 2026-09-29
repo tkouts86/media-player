@@ -3,19 +3,21 @@
 
 const KEY = 'mp.layout';
 
-// Parts of a player pane that can be switched on and off, in settings order.
+// Parts of a player pane that can be switched on and off, in settings order:
+// [key, label, on by default]
 export const PLAYER_PARTS = [
-  ['art', 'Album art'],
-  ['playPause', 'Play/pause'],
-  ['skip', 'Fast-forward/rewind'],
-  ['slider', 'Playback slider'],
-  ['title', 'Title'],
-  ['artist', 'Artist'],
-  ['year', 'Year'],
+  ['title', 'Song Title', true],
+  ['artist', 'Artist', true],
+  ['album', 'Album Title', false],
+  ['year', 'Year', true],
+  ['slider', 'Slider', true],
+  ['playPause', 'Play/Pause', true],
+  ['skip', 'Fast-Forward/Rewind', true],
+  ['art', 'Album Art', true],
 ];
 
 export function defaultLayout() {
-  const show = Object.fromEntries(PLAYER_PARTS.map(([key]) => [key, true]));
+  const show = Object.fromEntries(PLAYER_PARTS.map(([key, , on]) => [key, on]));
   return {
     background: { mode: 'color', color: '#000000' }, // mode: 'color' | 'album'
     panes: [
@@ -42,7 +44,9 @@ export function loadLayout() {
     const s = saved.panes?.[i] ?? {};
     pane.on = s.on !== false;
     if (s.type === 'player' || s.type === 'lyrics') pane.type = s.type;
-    for (const key of Object.keys(pane.show)) pane.show[key] = s.show?.[key] !== false;
+    for (const key of Object.keys(pane.show)) {
+      if (typeof s.show?.[key] === 'boolean') pane.show[key] = s.show[key]; // new parts keep their default
+    }
   });
   if (!layout.panes.some((pane) => pane.on)) layout.panes[0].on = true;
   return layout;
@@ -69,6 +73,8 @@ export function themeFor(background) {
     '--fg-dim': `rgba(${ink}, ${dark ? 0.36 : 0.42})`, // lyrics that aren't playing
     '--track': `rgba(${ink}, ${dark ? 0.16 : 0.22})`,  // slider track, switches that are off
     '--surface': `rgba(${ink}, 0.08)`,
+    '--panel': `rgba(${ink}, 0.1)`,  // settings panel
+    '--button': `rgba(${ink}, 0.16)`, // save/cancel buttons
     '--line': `rgba(${ink}, 0.14)`,
   };
 }

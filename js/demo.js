@@ -8,7 +8,7 @@ const art = (from, to) => 'data:image/svg+xml,' + encodeURIComponent(
 
 const tracks = [
   {
-    id: 'demo-1', name: 'Demo Song', album: 'Album Name', artists: ['Artist'], released: '1972-11-01',
+    id: 'demo-1', name: 'Song Title', album: 'Album Title', artists: ['Artist'], released: '1972-11-01',
     art: art('#f2994a', '#eb5757'), durationMs: 66000,
     lyrics: {
       synced: true,
@@ -30,7 +30,7 @@ const tracks = [
     },
   },
   {
-    id: 'demo-2', name: 'Second Song', album: 'A Much Longer Album Name That Needs Two Lines Before It Gets Cut Off',
+    id: 'demo-2', name: 'A Much Longer Song Title That Needs Two Lines Before It Gets Cut Off', album: 'Second Album',
     artists: ['Another Artist', 'Featured Guest'], released: '2019',
     art: art('#56ccf2', '#2f80ed'), durationMs: 40000, lyrics: null,
   },

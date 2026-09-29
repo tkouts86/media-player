@@ -36,6 +36,7 @@ export class PlayerView {
     this.title = $('.title');
     this.subtitle = $('.subtitle');
     this.artist = $('.artist');
+    this.albumName = $('.album-name');
     this.year = $('.year');
     this.progress = $('.progress');
     this.progressTrack = $('.progress-track');
@@ -98,12 +99,21 @@ export class PlayerView {
 
   update(playback) {
     this.playback = playback;
-    const artist = this.show.artist ? (playback ? playback.subtitle : 'Start playing on any device') : '';
-    const year = this.show.year && playback?.year ? playback.year : '';
     setText(this.title, playback ? playback.title : 'Nothing playing');
-    setText(this.artist, artist);
-    setText(this.year, artist && year ? ` · ${year}` : year);
-    this.subtitle.hidden = !artist && !year;
+
+    // Secondary line: "Artist · Album · Year", with whichever parts are switched on.
+    const parts = [
+      [this.artist, this.show.artist ? (playback ? playback.subtitle : 'Start playing on any device') : ''],
+      [this.albumName, this.show.album ? playback?.album ?? '' : ''],
+      [this.year, this.show.year ? playback?.year ?? '' : ''],
+    ];
+    let first = true;
+    for (const [el, text] of parts) {
+      setText(el, text && !first ? ` · ${text}` : text);
+      el.hidden = !text;
+      if (text) first = false;
+    }
+    this.subtitle.hidden = first;
     setImage(this.art, playback?.art);
 
     const { prev, play, next } = this.buttons;

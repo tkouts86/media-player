@@ -42,8 +42,9 @@ Tap **…** (top left) to edit the left pane, the right pane, or the background.
 tap ✓ to keep them or ✕ to discard. Settings are saved on each device separately.
 
 - **Panes** can be switched off (the other one moves to the center) and set to *Player* or
-  *Lyrics* — both panes can be the same type. Player panes can hide the album art, play/pause,
-  fast-forward/rewind, slider, title, artist and year; the album art grows to fill the space.
+  *Lyrics* — both panes can be the same type. Player panes show the song title with "Artist · Album · Year" below, and
+  each part (plus the album art, slider, play/pause and fast-forward/rewind) can be switched off;
+  the album title is off by default. The album art grows to fill the space.
 - **Background** can be black, white, any custom colour, or matched to the album art. Text and
   controls switch between light and dark to stay readable.
 

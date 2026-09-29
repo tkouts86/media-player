@@ -9,24 +9,22 @@ export function paneSettings(draft, index, paneName, onChange) {
   const el = document.createElement('div');
   el.className = 'settings';
   el.innerHTML = `
-    <div class="settings-card">
-      <label class="setting-row card-header">
-        <span class="card-title"></span>
-        <input type="checkbox" class="switch" data-key="on" aria-label="Show this pane">
-      </label>
-      <p class="setting-note" hidden>The other pane is off, so this one has to stay on.</p>
-      <div class="setting-row type-row">
-        <span>Pane type</span>
-        <div class="segmented">
-          <label><input type="radio" name="pane-type-${index}" value="player"><span>Player</span></label>
-          <label><input type="radio" name="pane-type-${index}" value="lyrics"><span>Lyrics</span></label>
-        </div>
+    <label class="setting-row">
+      <span class="pane-name"></span>
+      <input type="checkbox" class="switch" data-key="on" aria-label="Show this pane">
+    </label>
+    <p class="setting-note" hidden>The other pane is off, so this one has to stay on.</p>
+    <div class="setting-row type-row">
+      <span>Pane Type</span>
+      <div class="segmented">
+        <label><input type="radio" name="pane-type-${index}" value="player"><span>Player</span></label>
+        <label><input type="radio" name="pane-type-${index}" value="lyrics"><span>Lyrics</span></label>
       </div>
-      <div class="options">
-        ${PLAYER_PARTS.map(([key, label]) => `
-          <label class="setting-row"><span>${label}</span><input type="checkbox" class="switch" data-part="${key}"></label>
-        `).join('')}
-      </div>
+    </div>
+    <div class="options">
+      ${PLAYER_PARTS.map(([key, label]) => `
+        <label class="setting-row"><span>${label}</span><input type="checkbox" class="switch" data-part="${key}"></label>
+      `).join('')}
     </div>`;
 
   const pane = () => draft.panes[index];
@@ -41,7 +39,7 @@ export function paneSettings(draft, index, paneName, onChange) {
 
   function refresh() {
     const p = pane();
-    el.querySelector('.card-title').textContent = paneName(index);
+    el.querySelector('.pane-name').textContent = paneName(index);
     const onSwitch = el.querySelector('[data-key="on"]');
     onSwitch.checked = p.on;
     onSwitch.disabled = p.on && !draft.panes[1 - index].on; // at least one pane stays on
@@ -59,16 +57,16 @@ export function paneSettings(draft, index, paneName, onChange) {
 // getArtUrl() returns the current album art, shown on the "Album art" choice.
 export function backgroundSettings(draft, getArtUrl, onChange) {
   const el = document.createElement('div');
-  el.className = 'settings';
+  el.className = 'settings-card';
   el.innerHTML = `
-    <div class="settings-card">
+    <div class="settings-list">
       <span class="card-title">Background</span>
       <div class="swatches">
         ${Object.entries(STANDARD_COLORS).map(([color, name]) => `
           <button class="swatch" data-color="${color}"><span class="dot" style="background:${color}"></span>${name}</button>
         `).join('')}
         <label class="swatch" data-custom><input type="color" class="dot color-input" aria-label="Custom color">Custom</label>
-        <button class="swatch" data-album><span class="dot"><img alt=""></span>Album art</button>
+        <button class="swatch" data-album><span class="dot"><img alt=""></span>Album Art</button>
       </div>
     </div>`;
 

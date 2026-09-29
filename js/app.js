@@ -137,9 +137,8 @@ function normalize(data) {
     name: item.name,
     album: item.album?.name ?? '',
     firstArtist: artists[0] ?? '',
-    // The main text is the album name for songs and the episode title for podcasts;
-    // the secondary text is the artists or the podcast's name.
-    title: isEpisode ? item.name : item.album?.name || item.name,
+    // Main text: the song or episode title. Secondary text: the artists, or the podcast's name.
+    title: item.name,
     subtitle: isEpisode ? item.show?.name ?? '' : artists.join(', '),
     year: year && year !== '0000' ? year : '',
     art: (item.album?.images ?? item.images ?? item.show?.images)?.[0]?.url ?? null,
@@ -249,15 +248,16 @@ els.connect.addEventListener('click', () => auth.login());
 // ---- Panes and background ------------------------------------------------------------------
 
 // Sizes inside a pane are in units of its height (capped for narrow panes), set as --u.
+// contentRect leaves out the pane's padding for the notch and home indicator.
 const paneSizer = new ResizeObserver((entries) => {
-  for (const { target } of entries) {
-    target.style.setProperty('--u', `${Math.min(target.clientHeight, target.clientWidth * 1.2) / 100}px`);
+  for (const { target, contentRect } of entries) {
+    target.style.setProperty('--u', `${Math.min(contentRect.height, contentRect.width * 1.2) / 100}px`);
   }
 });
 els.paneSlots.forEach((slot) => paneSizer.observe(slot));
 
 function paneName(index) {
-  return (portrait.matches ? ['Top pane', 'Bottom pane'] : ['Left pane', 'Right pane'])[index];
+  return (portrait.matches ? ['Top Pane', 'Bottom Pane'] : ['Left Pane', 'Right Pane'])[index];
 }
 
 // Fills each pane slot from the layout being shown (the draft while editing).
@@ -266,8 +266,10 @@ function renderLayout() {
   for (const view of views) view.destroy();
   views = [];
 
+  els.player.dataset.editing = editing ?? ''; // the save/cancel buttons sit over the pane being edited
   els.paneSlots.forEach((slot, i) => {
     slot.hidden = false;
+    slot.classList.toggle('hosts-settings', editing === 1 - i);
     if (editing === 'background') return slot.replaceChildren(); // panes hide while picking a colour
     if (editing === 1 - i) {
       // This slot hosts the settings for the other pane. Leave it in place if it's already
@@ -278,7 +280,7 @@ function renderLayout() {
     const pane = shown.panes[i];
     if (!pane.on) {
       slot.replaceChildren();
-      if (editing === i) slot.append(offMessage(i));
+      if (editing === i) slot.append(offMessage());
       else slot.hidden = true;
       return;
     }
@@ -292,10 +294,10 @@ function renderLayout() {
   applyTheme();
 }
 
-function offMessage(index) {
+function offMessage() {
   const el = document.createElement('p');
   el.className = 'pane-off';
-  el.textContent = `${paneName(index)} is off`;
+  el.textContent = 'This pane is off';
   return el;
 }
 
@@ -318,10 +320,7 @@ async function updateAlbumBackground() {
   applyTheme();
 }
 
-portrait.addEventListener('change', () => {
-  settings?.refresh();
-  for (const el of els.panes.querySelectorAll('.pane-off')) el.replaceWith(offMessage(Number(el.parentNode.id.slice(-1))));
-});
+portrait.addEventListener('change', () => settings?.refresh());
 
 // ---- Editing -------------------------------------------------------------------------------
 
