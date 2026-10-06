@@ -40,6 +40,15 @@ function formatTime(date) {
   return hour12 ? `${date.getHours() % 12 || 12}:${minutes}` : `${String(date.getHours()).padStart(2, '0')}:${minutes}`;
 }
 
+// "3:20", or "1:02:03" for long podcasts.
+function formatDuration(totalSeconds) {
+  const s = Math.max(0, totalSeconds);
+  const pad = (n) => String(n).padStart(2, '0');
+  const h = Math.floor(s / 3600);
+  const m = Math.floor(s / 60) % 60;
+  return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
+}
+
 // actions: { togglePlay, previous, next, jump(deltaMs), seek(ms) }
 export class PlayerView {
   constructor(show, actions) {
@@ -48,6 +57,7 @@ export class PlayerView {
     this.playback = null;
     this.dragPosition = null; // ms under the finger while scrubbing
     this.lastFill = -1;
+    this.lastSecond = null;
     this.lastStatusAt = 0;
 
     const $ = (selector) => this.el.querySelector(selector);
@@ -59,6 +69,9 @@ export class PlayerView {
     this.artist = $('.artist');
     this.albumName = $('.album-name');
     this.year = $('.year');
+    this.progressRow = $('.progress-row');
+    this.elapsed = $('.elapsed');
+    this.remaining = $('.remaining');
     this.progress = $('.progress');
     this.progressTrack = $('.progress-track');
     this.progressFill = $('.progress-fill');
@@ -73,14 +86,13 @@ export class PlayerView {
     $('.status').hidden = !hasStatus;
     this.artBox.hidden = !show.art;
     this.title.hidden = !show.title;
-    this.progress.hidden = !show.slider;
+    this.progressRow.hidden = !show.slider;
     const { back15, prev, play, next, fwd15 } = this.buttons;
-    play.hidden = !show.playPause;
     prev.hidden = next.hidden = !show.skip;
     back15.hidden = fwd15.hidden = !show.jump;
     this.controls.hidden = !show.playPause && !show.skip && !show.jump;
     this.controls.classList.toggle('with-jump', show.jump);
-    this.controls.classList.toggle('only-play', show.playPause && !show.skip && !show.jump);
+    // Without play/pause, the other buttons keep their places around an empty middle.
     this.controls.classList.toggle('no-play', !show.playPause);
 
     play.addEventListener('click', actions.togglePlay);
@@ -159,12 +171,23 @@ export class PlayerView {
   }
 
   tick(position) {
-    const fraction = this.playback ? (this.dragPosition ?? position) / this.playback.durationMs : 0;
+    const shown = this.playback ? this.dragPosition ?? position : 0; // follows the finger while scrubbing
+    const fraction = this.playback ? shown / this.playback.durationMs : 0;
     const rounded = Math.round(fraction * 2000) / 2000;
     if (rounded !== this.lastFill) {
       this.progressFill.style.transform = `scaleX(${rounded})`;
       this.lastFill = rounded;
     }
+
+    // Elapsed and remaining time, e.g. "0:11" and "-3:20"; they always add up to the length.
+    const second = this.playback ? Math.floor(shown / 1000) : null;
+    if (second !== this.lastSecond) {
+      this.lastSecond = second;
+      const total = this.playback ? Math.round(this.playback.durationMs / 1000) : 0;
+      setText(this.elapsed, this.playback ? formatDuration(second) : '');
+      setText(this.remaining, this.playback ? `-${formatDuration(total - second)}` : '');
+    }
+
     const now = performance.now();
     if (now - this.lastStatusAt > 1000) {
       this.lastStatusAt = now;

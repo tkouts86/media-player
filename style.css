@@ -180,8 +180,19 @@ button {
 }
 .year { flex-shrink: 0; }
 
+.progress-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: calc(3.5 * var(--u));
+  font-size: calc(3.8 * var(--u));
+  color: var(--fg-2);
+  font-variant-numeric: tabular-nums; /* digits don't shift as the time changes */
+  white-space: nowrap;
+}
 .progress {
-  width: 82%;
+  flex: 1;
+  min-width: 0;
   padding: calc(1.5 * var(--u)) 0; /* bigger touch target than the visible bar */
   cursor: pointer;
   touch-action: none;
@@ -199,18 +210,16 @@ button {
   transform-origin: left;
 }
 
+/* Buttons sit at set distances out from play/pause, so when one pair is switched off the
+   other pair moves in next to it. */
 .controls {
-  width: 75%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-}
-.controls.with-jump { width: 92%; }
-.controls.only-play { justify-content: center; }
-.controls.no-play:not(.with-jump) {
   justify-content: center;
-  gap: calc(14 * var(--u));
+  gap: calc(1.9 * var(--u));
 }
+.controls .play { margin: 0 calc(5 * var(--u)); }
+.controls.no-play .play { visibility: hidden; pointer-events: none; }
 .control {
   display: grid;
   place-items: center;
