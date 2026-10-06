@@ -3,18 +3,29 @@
 
 const KEY = 'mp.layout';
 
-// Parts of a player pane that can be switched on and off, in settings order:
+// Parts of a player pane that can be switched on and off, grouped as in settings:
 // [key, label, on by default]
-export const PLAYER_PARTS = [
-  ['title', 'Song Title', true],
-  ['artist', 'Artist', true],
-  ['album', 'Album Title', false],
-  ['year', 'Year', true],
-  ['slider', 'Slider', true],
-  ['playPause', 'Play/Pause', true],
-  ['skip', 'Fast-Forward/Rewind', true],
-  ['art', 'Album Art', true],
+export const PLAYER_PART_GROUPS = [
+  [
+    ['title', 'Song Title', true],
+    ['artist', 'Artist', true],
+    ['album', 'Album Title', false],
+    ['year', 'Year', true],
+  ],
+  [
+    ['date', 'Date', false],
+    ['time', 'Time', false],
+    ['battery', 'Battery', false],
+  ],
+  [
+    ['slider', 'Slider', true],
+    ['playPause', 'Play/Pause', true],
+    ['skip', 'Fast-Forward/Rewind', true],
+    ['jump', '15-Second Skip', false],
+    ['art', 'Album Art', true],
+  ],
 ];
+export const PLAYER_PARTS = PLAYER_PART_GROUPS.flat();
 
 export function defaultLayout() {
   const show = Object.fromEntries(PLAYER_PARTS.map(([key, , on]) => [key, on]));
@@ -69,11 +80,11 @@ export function themeFor(background) {
   return {
     '--bg': background,
     '--fg': `rgb(${ink})`,
-    '--fg-2': `rgba(${ink}, ${dark ? 0.6 : 0.56})`,  // secondary text, the "…" button
+    '--fg-2': `rgba(${ink}, ${dark ? 0.6 : 0.56})`,  // secondary text
     '--fg-dim': `rgba(${ink}, ${dark ? 0.36 : 0.42})`, // lyrics that aren't playing
     '--track': `rgba(${ink}, ${dark ? 0.16 : 0.22})`,  // slider track, switches that are off
     '--surface': `rgba(${ink}, 0.08)`,
-    '--panel': `rgba(${ink}, 0.1)`,  // settings panel
+    '--panel': `rgba(${ink}, 0.06)`, // settings panel: just a shade off the background
     '--button': `rgba(${ink}, 0.16)`, // save/cancel buttons
     '--line': `rgba(${ink}, 0.14)`,
   };

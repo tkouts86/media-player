@@ -21,8 +21,8 @@ const els = {
   linkSend: $('link-send'), linkSendStart: $('link-send-start'), linkSendCode: $('link-send-code'),
   linkLogin: $('link-login'), linkCode: $('link-code'), linkStatus: $('link-status'), linkNew: $('link-new'),
   player: $('player'), panes: $('panes'), paneSlots: [$('pane-0'), $('pane-1')],
-  menuButton: $('menu-button'), saveButton: $('save-button'), cancelButton: $('cancel-button'),
-  menu: $('menu'), menuVersion: $('menu-version'), bgFrame: $('bg-frame'), toast: $('toast'),
+  toolbar: $('toolbar'), saveButton: $('save-button'), cancelButton: $('cancel-button'),
+  menu: $('menu'), menuItems: $('menu-items'), menuVersion: $('menu-version'), bgFrame: $('bg-frame'), toast: $('toast'),
 };
 const screens = [els.login, els.linkReceive, els.linkSend, els.player];
 const portrait = matchMedia('(orientation: portrait)');
@@ -235,13 +235,12 @@ const actions = {
     if (currentProgress() > 3000) seekTo(0);
     else command(() => api.previous());
   },
-  seek: seekTo,
-  logout() {
-    if (!isDemo && confirm('Log out of Spotify?')) {
-      auth.logout();
-      showLogin();
-    }
+  // The 15-second skip buttons.
+  jump(deltaMs) {
+    if (!playback) return;
+    seekTo(Math.min(Math.max(0, currentProgress() + deltaMs), playback.durationMs - 1000));
   },
+  seek: seekTo,
 };
 
 els.connect.addEventListener('click', () => auth.login());
@@ -257,49 +256,47 @@ const paneSizer = new ResizeObserver((entries) => {
 });
 els.paneSlots.forEach((slot) => paneSizer.observe(slot));
 
-function paneName(index) {
-  return (portrait.matches ? ['Top Pane', 'Bottom Pane'] : ['Left Pane', 'Right Pane'])[index];
+function sideName(index) {
+  return (portrait.matches ? ['top', 'bottom'] : ['left', 'right'])[index];
 }
 
-// Fills each pane slot from the layout being shown (the draft while editing).
+const slotViews = [null, null]; // the view shown in each pane slot, if any
+
+// Fills each pane slot from the layout being shown (the draft while editing). A slot whose
+// content hasn't changed is left alone, so the other pane doesn't flicker or lose its scroll.
 function renderLayout() {
   const shown = draft ?? layout;
-  for (const view of views) view.destroy();
-  views = [];
-
   els.player.dataset.editing = editing ?? ''; // the save/cancel buttons sit over the pane being edited
   els.paneSlots.forEach((slot, i) => {
-    slot.hidden = false;
-    slot.classList.toggle('hosts-settings', editing === 1 - i);
-    if (editing === 'background') return slot.replaceChildren(); // panes hide while picking a colour
-    if (editing === 1 - i) {
-      // This slot hosts the settings for the other pane. Leave it in place if it's already
-      // there, so its scroll position survives.
-      if (slot.firstChild !== settings.el) slot.replaceChildren(settings.el);
-      return;
-    }
     const pane = shown.panes[i];
-    if (!pane.on) {
+    const hostsSettings = editing === 1 - i; // settings take over the other pane
+    const content = editing === 'background' ? 'empty' // panes hide while picking a colour
+      : hostsSettings ? 'settings'
+      : pane.on ? `${pane.type}:${JSON.stringify(pane.show)}`
+      : 'hidden';
+    slot.hidden = content === 'hidden';
+    slot.classList.toggle('hosts-settings', hostsSettings);
+    slot.classList.toggle('locked', editing === i); // the pane being edited is a preview only
+    if (content === slot.dataset.content && (content !== 'settings' || slot.firstChild === settings.el)) return;
+
+    slot.dataset.content = content;
+    slotViews[i]?.destroy();
+    slotViews[i] = null;
+    if (content === 'settings') {
+      slot.replaceChildren(settings.el);
+    } else if (content === 'empty' || content === 'hidden') {
       slot.replaceChildren();
-      if (editing === i) slot.append(offMessage());
-      else slot.hidden = true;
-      return;
+    } else {
+      const view = pane.type === 'player' ? new PlayerView(pane.show, actions) : new LyricsView(actions);
+      slot.replaceChildren(view.el);
+      view.update(playback, lyrics);
+      slotViews[i] = view;
     }
-    const view = pane.type === 'player' ? new PlayerView(pane.show, actions) : new LyricsView(actions);
-    slot.replaceChildren(view.el);
-    views.push(view);
   });
-
+  views = slotViews.filter(Boolean);
+  // With one pane showing, it's the main pane, centred on the screen.
   els.panes.classList.toggle('single', els.paneSlots.filter((slot) => !slot.hidden).length === 1);
-  for (const view of views) view.update(playback, lyrics);
   applyTheme();
-}
-
-function offMessage() {
-  const el = document.createElement('p');
-  el.className = 'pane-off';
-  el.textContent = 'This pane is off';
-  return el;
 }
 
 function applyTheme() {
@@ -323,33 +320,126 @@ async function updateAlbumBackground() {
 
 portrait.addEventListener('change', () => settings?.refresh());
 
-// ---- Editing -------------------------------------------------------------------------------
+function changeLayout(change) {
+  change(layout);
+  saveLayout(layout);
+  renderLayout();
+}
 
-els.menuButton.addEventListener('click', () => {
-  if (!els.menu.hidden) return closeMenu();
-  els.menu.querySelector('[data-edit="0"]').textContent = `Edit ${paneName(0).toLowerCase()}`;
-  els.menu.querySelector('[data-edit="1"]').textContent = `Edit ${paneName(1).toLowerCase()}`;
+function hidePane(index) {
+  changeLayout((l) => { l.panes[index].on = false; });
+}
+
+function swapPanes() {
+  changeLayout((l) => l.panes.reverse());
+}
+
+// With only one pane showing: bring the hidden one back on the chosen side (0 = left/top).
+function addPane(mainIndex, side) {
+  changeLayout((l) => {
+    const main = l.panes[mainIndex];
+    const added = l.panes[1 - mainIndex];
+    added.on = true;
+    l.panes = side === 0 ? [added, main] : [main, added];
+  });
+}
+
+// Swiping sideways flips a pane between player and lyrics.
+function switchPaneType(index, towardLeft) {
+  changeLayout((l) => {
+    l.panes[index].type = l.panes[index].type === 'player' ? 'lyrics' : 'player';
+  });
+  slotViews[index]?.el.classList.add(towardLeft ? 'enter-from-right' : 'enter-from-left');
+}
+
+// ---- Pressing and holding a pane, swiping a pane -------------------------------------------
+
+const LONG_PRESS_MS = 550;
+const SWIPE_MIN_PX = 60;
+
+els.paneSlots.forEach((slot, index) => {
+  let start = null;
+  let timer = 0;
+  let suppressClick = false;
+
+  slot.addEventListener('pointerdown', (e) => {
+    if (!e.isPrimary || editing !== null || e.target.closest('.progress')) return; // the slider drags
+    start = { x: e.clientX, y: e.clientY, at: performance.now() };
+    suppressClick = false;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      suppressClick = true; // lifting the finger shouldn't also tap whatever is underneath
+      openPaneMenu(index, start.x, start.y);
+      start = null;
+    }, LONG_PRESS_MS);
+  });
+  slot.addEventListener('pointermove', (e) => {
+    if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 10) clearTimeout(timer);
+  });
+  slot.addEventListener('pointerup', (e) => {
+    clearTimeout(timer);
+    if (!start) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    const quick = performance.now() - start.at < 800;
+    start = null;
+    if (quick && Math.abs(dx) > SWIPE_MIN_PX && Math.abs(dx) > 2 * Math.abs(dy)) {
+      suppressClick = true;
+      switchPaneType(index, dx < 0);
+    }
+  });
+  slot.addEventListener('pointercancel', () => {
+    clearTimeout(timer);
+    start = null;
+  });
+  slot.addEventListener('click', (e) => {
+    if (!suppressClick) return;
+    suppressClick = false;
+    e.stopPropagation();
+    e.preventDefault();
+  }, true);
+  slot.addEventListener('contextmenu', (e) => e.preventDefault());
+});
+
+function openPaneMenu(index, x, y) {
+  const both = layout.panes.every((pane) => pane.on);
+  const items = [
+    ['Edit pane', () => startEditing(index)],
+    ['Edit background', () => startEditing('background')],
+    ...(both
+      ? [['Hide pane', () => hidePane(index)], ['Swap panes', swapPanes]]
+      : [0, 1].map((side) => [`Add ${sideName(side)} pane`, () => addPane(index, side)])),
+  ];
+  els.menuItems.replaceChildren(...items.map(([label, run]) => {
+    const button = document.createElement('button');
+    button.setAttribute('role', 'menuitem');
+    button.textContent = label;
+    button.addEventListener('click', () => {
+      closeMenu();
+      run();
+    });
+    return button;
+  }));
   // Shows which version is running, to check that an update arrived.
   els.menuVersion.textContent = Number.isNaN(loadedVersion) ? '' : `Updated ${new Date(loadedVersion)
     .toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
+
+  // Open next to the finger, kept on screen.
   els.menu.hidden = false;
-});
+  const { width, height } = els.menu.getBoundingClientRect();
+  els.menu.style.left = `${Math.max(8, Math.min(x, innerWidth - width - 8))}px`;
+  els.menu.style.top = `${Math.max(8, Math.min(y, innerHeight - height - 8))}px`;
+}
 
 function closeMenu() {
   els.menu.hidden = true;
 }
 
 document.addEventListener('pointerdown', (e) => {
-  if (!els.menu.hidden && !els.menu.contains(e.target) && !els.menuButton.contains(e.target)) closeMenu();
+  if (!els.menu.hidden && !els.menu.contains(e.target)) closeMenu();
 });
 
-els.menu.addEventListener('click', (e) => {
-  const item = e.target.closest('[data-edit]');
-  if (!item) return;
-  closeMenu();
-  const target = item.dataset.edit === 'background' ? 'background' : Number(item.dataset.edit);
-  startEditing(target);
-});
+// ---- Editing -------------------------------------------------------------------------------
 
 function startEditing(target) {
   editing = target;
@@ -359,9 +449,9 @@ function startEditing(target) {
     els.bgFrame.replaceChildren(settings.el);
     els.bgFrame.hidden = false;
   } else {
-    settings = paneSettings(draft, target, paneName, renderLayout);
+    settings = paneSettings(draft, target, renderLayout, isDemo ? null : logOutFromSettings);
   }
-  setEditingToolbar(true);
+  els.toolbar.hidden = false;
   renderLayout();
 }
 
@@ -372,19 +462,24 @@ function finishEditing(save) {
   } else if (JSON.stringify(draft) !== JSON.stringify(layout) && !confirm('Discard your changes?')) {
     return;
   }
+  closeEditor();
+}
+
+function closeEditor() {
   draft = null;
   editing = null;
   settings = null;
   els.bgFrame.hidden = true;
   els.bgFrame.replaceChildren();
-  setEditingToolbar(false);
+  els.toolbar.hidden = true;
   renderLayout();
 }
 
-function setEditingToolbar(on) {
-  els.menuButton.hidden = on;
-  els.saveButton.hidden = !on;
-  els.cancelButton.hidden = !on;
+function logOutFromSettings() {
+  if (!confirm('Log out of Spotify?')) return;
+  closeEditor();
+  auth.logout();
+  showLogin();
 }
 
 els.saveButton.addEventListener('click', () => finishEditing(true));

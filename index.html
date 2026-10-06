@@ -25,27 +25,25 @@
     <!-- Shown instead of the panes while editing the background. -->
     <div id="bg-frame" class="bg-frame" hidden></div>
 
-    <div class="toolbar">
-      <button id="menu-button" class="tool" aria-label="Options">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/></svg>
-      </button>
-      <button id="save-button" class="tool filled" aria-label="Save changes" hidden>
+    <!-- Save/cancel, shown while editing. -->
+    <div id="toolbar" class="toolbar" hidden>
+      <button id="save-button" class="tool filled" aria-label="Save changes">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
-      <button id="cancel-button" class="tool filled" aria-label="Cancel changes" hidden>
+      <button id="cancel-button" class="tool filled" aria-label="Cancel changes">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
       </button>
     </div>
+    <!-- Opened by pressing and holding a pane; app.js fills in the options. -->
     <div id="menu" class="menu" role="menu" hidden>
-      <button role="menuitem" data-edit="0">Edit left pane</button>
-      <button role="menuitem" data-edit="1">Edit right pane</button>
-      <button role="menuitem" data-edit="background">Edit background</button>
+      <div id="menu-items" class="menu-items"></div>
       <p id="menu-version" class="menu-version"></p>
     </div>
   </main>
 
   <template id="tpl-player">
     <div class="player-view">
+      <div class="status"><span class="date"></span><span class="time"></span><span class="battery"></span></div>
       <div class="art-box"><img class="art" alt="Album art" draggable="false"></div>
       <div class="meta">
         <div class="title"></div>
@@ -55,6 +53,9 @@
         <div class="progress-track"><div class="progress-fill"></div></div>
       </div>
       <div class="controls">
+        <button class="control jump back15" aria-label="Back 15 seconds">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a8 8 0 1 1-7.52 5.26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M8.6 5 12.6 2.3v5.4z" fill="currentColor"/><text x="12" y="16.3" text-anchor="middle" font-size="7.6" font-weight="700" fill="currentColor">15</text></svg>
+        </button>
         <button class="control skip prev" aria-label="Previous">
           <svg viewBox="0 0 46 26" aria-hidden="true"><path d="M22 3 3 13l19 10zM43 3 24 13l19 10z" fill="currentColor" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>
         </button>
@@ -64,6 +65,9 @@
         </button>
         <button class="control skip next" aria-label="Next">
           <svg viewBox="0 0 46 26" aria-hidden="true"><path d="M24 3 43 13 24 23zM3 3l19 10L3 23z" fill="currentColor" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="control jump fwd15" aria-label="Forward 15 seconds">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a8 8 0 1 0 7.52 5.26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M15.4 5 11.4 2.3v5.4z" fill="currentColor"/><text x="12" y="16.3" text-anchor="middle" font-size="7.6" font-weight="700" fill="currentColor">15</text></svg>
         </button>
       </div>
     </div>

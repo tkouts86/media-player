@@ -41,7 +41,7 @@ button {
   --fg-dim: rgba(255, 255, 255, 0.42);
   --track: rgba(255, 255, 255, 0.22);
   --surface: rgba(255, 255, 255, 0.08);
-  --panel: rgba(255, 255, 255, 0.1);
+  --panel: rgba(255, 255, 255, 0.06);
   --button: rgba(255, 255, 255, 0.16);
   --line: rgba(255, 255, 255, 0.14);
   position: fixed;
@@ -71,11 +71,24 @@ button {
   min-height: 0;
   overflow: hidden;
   padding-top: env(safe-area-inset-top);
+  touch-action: pan-y; /* scroll vertically as usual; sideways swipes switch the pane type */
 }
 .pane:first-child { padding-left: env(safe-area-inset-left); }
 .pane:last-child { padding-right: env(safe-area-inset-right); }
 .panes.single .pane { padding-left: 0; padding-right: 0; }
 .pane.hosts-settings { background: var(--panel); }
+/* While a pane is being edited it's a dimmed preview that can't be touched. */
+.pane.locked > * {
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+/* Swiping a pane slides the other type in. */
+@keyframes enter-from-right { from { transform: translateX(18%); opacity: 0; } }
+@keyframes enter-from-left { from { transform: translateX(-18%); opacity: 0; } }
+.enter-from-right { animation: enter-from-right 0.28s ease-out; }
+.enter-from-left { animation: enter-from-left 0.28s ease-out; }
 
 @media (orientation: portrait) {
   .panes { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
@@ -85,17 +98,11 @@ button {
   .panes.single .pane { padding-top: env(safe-area-inset-top); }
 }
 
-.pane-off {
-  height: 100%;
-  display: grid;
-  place-items: center;
-  color: var(--fg-2);
-  font-size: 17px;
-}
-
 /* ---- Player pane ---- */
 
 .player-view {
+  --status-space: calc(32px + 8.4 * var(--u)); /* status line plus the gap below it */
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -103,6 +110,24 @@ button {
   justify-content: center;
   gap: calc(2.4 * var(--u));
   padding: 32px 6%;
+}
+/* Leave room for the status line; without album art, keep the rest centred on the pane. */
+.player-view.has-status { padding-top: var(--status-space); }
+.player-view.has-status:not(.has-art) { padding-bottom: var(--status-space); }
+
+/* Date, time and battery: spaced apart, no separators. */
+.status {
+  position: absolute;
+  top: 32px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  font-size: calc(4.8 * var(--u));
+  line-height: 1.25;
+  color: var(--fg-2);
+  white-space: nowrap;
 }
 
 /* Takes whatever height is left; app sizes the square art to fit inside it. */
@@ -180,11 +205,12 @@ button {
   align-items: center;
   justify-content: space-between;
 }
-.controls.no-play {
+.controls.with-jump { width: 92%; }
+.controls.only-play { justify-content: center; }
+.controls.no-play:not(.with-jump) {
   justify-content: center;
   gap: calc(14 * var(--u));
 }
-.controls.no-skip { justify-content: center; }
 .control {
   display: grid;
   place-items: center;
@@ -195,7 +221,13 @@ button {
 .control:active { transform: scale(0.88); opacity: 0.6; }
 .control:disabled { opacity: 0.3; }
 .control svg { display: block; }
+/* Slightly greyed next to play/pause. Fading each icon as a whole (not a see-through colour)
+   keeps overlapping fill and outline from showing up as a brighter edge. */
+.skip svg,
+.jump svg { opacity: 0.72; }
 .skip svg { width: calc(12.5 * var(--u)); height: calc(7.1 * var(--u)); }
+.with-jump .skip svg { width: calc(10.5 * var(--u)); height: calc(6 * var(--u)); }
+.jump svg { width: calc(7.4 * var(--u)); height: calc(7.4 * var(--u)); overflow: visible; }
 .play svg { width: calc(8.3 * var(--u)); height: calc(9.6 * var(--u)); }
 .play .icon-pause,
 .play.playing .icon-play { display: none; }
@@ -260,7 +292,7 @@ button {
   color: var(--fg-2);
 }
 
-/* ---- Toolbar and menu (top left) ---- */
+/* ---- Save/cancel buttons and the press-and-hold menu ---- */
 
 .toolbar {
   position: absolute;
@@ -305,16 +337,18 @@ button {
 .tool:active { opacity: 0.6; }
 
 .menu {
-  position: absolute;
-  top: calc(env(safe-area-inset-top) + 56px);
-  left: calc(env(safe-area-inset-left) + 10px);
-  z-index: 6;
+  position: fixed; /* app.js places it next to the finger */
+  z-index: 30;
   min-width: 210px;
   padding: 6px;
   border-radius: 14px;
   background: rgba(44, 44, 46, 0.97);
   color: #fff;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+}
+.menu-items {
   display: flex;
   flex-direction: column;
 }
@@ -339,8 +373,11 @@ button {
   height: 100%;
   overflow-y: auto;
   scrollbar-width: none;
-  padding: 26px 22px 26px 30px;
+  padding: 30px 24px 30px 32px;
 }
+/* A little extra room between groups of settings. */
+.settings > * + *,
+.player-options > * + * { margin-top: 14px; }
 .settings::-webkit-scrollbar { display: none; }
 .bg-frame {
   position: absolute;
@@ -368,33 +405,37 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 36px;
+  min-height: 38px;
   font-size: 17px;
-  cursor: pointer;
 }
-.type-row { min-height: 42px; }
-.setting-note {
-  margin: -2px 0 4px;
-  font-size: 13px;
+.setting-hint {
+  display: block;
+  font-size: 12px;
   color: var(--fg-2);
 }
+.logout-button {
+  min-height: 38px;
+  font-size: 17px;
+  color: #ff6961;
+}
 
-/* Switch: a slim track with a round knob that turns green when on. */
+/* Switch: a slim track with a round knob that turns green when on. The box is a bit bigger
+   than what's drawn, so it's easy to hit (only the switch responds, not the whole row). */
 .switch {
   -webkit-appearance: none;
   appearance: none;
   position: relative;
   flex-shrink: 0;
-  width: 40px;
-  height: 22px;
-  margin: 0;
+  width: 46px;
+  height: 32px;
+  margin: 0 -3px 0 0;
   background: none;
   cursor: pointer;
 }
 .switch::before {
   content: "";
   position: absolute;
-  inset: 3px 2px;
+  inset: 8px 3px;
   border-radius: 8px;
   background: var(--track);
   transition: background-color 0.2s;
@@ -402,8 +443,8 @@ button {
 .switch::after {
   content: "";
   position: absolute;
-  top: 0;
-  left: 0;
+  top: 5px;
+  left: 1px;
   width: 22px;
   height: 22px;
   border-radius: 50%;
@@ -412,7 +453,7 @@ button {
   transition: transform 0.2s, background-color 0.2s;
 }
 .switch:checked::before { background: rgba(34, 197, 94, 0.45); }
-.switch:checked::after { transform: translateX(18px); background: #22c55e; }
+.switch:checked::after { transform: translateX(22px); background: #22c55e; }
 .switch:disabled { opacity: 0.4; cursor: default; }
 
 .segmented {

@@ -1,53 +1,60 @@
 // The settings panels shown while editing. Each edits the draft layout in place, calls
 // onChange() after every edit, and returns { el, refresh } so the panel can be re-synced.
-import { PLAYER_PARTS } from './layout.js';
-import { setImage } from './views.js';
+import { PLAYER_PART_GROUPS } from './layout.js';
+import { setImage, batterySupported } from './views.js';
 
 const STANDARD_COLORS = { '#000000': 'Black', '#ffffff': 'White' };
 
-export function paneSettings(draft, index, paneName, onChange) {
+// Settings for one pane: its type and, for players, which parts show. Only the switches
+// themselves respond to taps, not the whole row. onLogout is omitted in the demo.
+export function paneSettings(draft, index, onChange, onLogout) {
   const el = document.createElement('div');
   el.className = 'settings';
   el.innerHTML = `
-    <label class="setting-row">
-      <span class="pane-name"></span>
-      <input type="checkbox" class="switch" data-key="on" aria-label="Show this pane">
-    </label>
-    <p class="setting-note" hidden>The other pane is off, so this one has to stay on.</p>
-    <div class="setting-row type-row">
-      <span>Pane Type</span>
-      <div class="segmented">
-        <label><input type="radio" name="pane-type-${index}" value="player"><span>Player</span></label>
-        <label><input type="radio" name="pane-type-${index}" value="lyrics"><span>Lyrics</span></label>
+    <div class="setting-group">
+      <div class="setting-row">
+        <span>Pane Type</span>
+        <div class="segmented">
+          <label><input type="radio" name="pane-type-${index}" value="player"><span>Player</span></label>
+          <label><input type="radio" name="pane-type-${index}" value="lyrics"><span>Lyrics</span></label>
+        </div>
       </div>
     </div>
-    <div class="options">
-      ${PLAYER_PARTS.map(([key, label]) => `
-        <label class="setting-row"><span>${label}</span><input type="checkbox" class="switch" data-part="${key}"></label>
-      `).join('')}
-    </div>`;
+    <div class="player-options">
+      ${PLAYER_PART_GROUPS.map((group) => `
+        <div class="setting-group">
+          ${group.map(([key, label]) => `
+            <div class="setting-row">
+              <span>${label}<small class="setting-hint" data-hint="${key}" hidden></small></span>
+              <input type="checkbox" class="switch" data-part="${key}" aria-label="${label}">
+            </div>`).join('')}
+        </div>`).join('')}
+    </div>
+    ${onLogout ? '<div class="setting-group"><button class="logout-button">Log Out of Spotify</button></div>' : ''}`;
 
   const pane = () => draft.panes[index];
   el.addEventListener('change', (e) => {
     const input = e.target;
-    if (input.dataset.key === 'on') pane().on = input.checked;
-    else if (input.type === 'radio') pane().type = input.value;
+    if (input.type === 'radio') pane().type = input.value;
     else if (input.dataset.part) pane().show[input.dataset.part] = input.checked;
     refresh();
     onChange();
   });
+  el.querySelector('.logout-button')?.addEventListener('click', onLogout);
+
+  // iPhones can't read the battery level, so that switch is greyed out there.
+  const batteryHint = el.querySelector('[data-hint="battery"]');
+  batteryHint.textContent = 'Not available on this device';
+  batteryHint.hidden = batterySupported();
+  el.querySelector('[data-part="battery"]').disabled = !batterySupported();
 
   function refresh() {
     const p = pane();
-    el.querySelector('.pane-name').textContent = paneName(index);
-    const onSwitch = el.querySelector('[data-key="on"]');
-    onSwitch.checked = p.on;
-    onSwitch.disabled = p.on && !draft.panes[1 - index].on; // at least one pane stays on
-    el.querySelector('.setting-note').hidden = !onSwitch.disabled;
-    el.querySelector('.type-row').hidden = !p.on;
     for (const radio of el.querySelectorAll('input[type="radio"]')) radio.checked = radio.value === p.type;
-    el.querySelector('.options').hidden = !p.on || p.type !== 'player';
-    for (const toggle of el.querySelectorAll('[data-part]')) toggle.checked = p.show[toggle.dataset.part];
+    el.querySelector('.player-options').hidden = p.type !== 'player';
+    for (const toggle of el.querySelectorAll('[data-part]')) {
+      toggle.checked = p.show[toggle.dataset.part] && !toggle.disabled;
+    }
   }
 
   refresh();

@@ -45,15 +45,20 @@ instead of cached ones.
 
 ## Customizing
 
-Tap **…** (top left) to edit the left pane, the right pane, or the background. Changes preview live;
-tap ✓ to keep them or ✕ to discard. Settings are saved on each device separately.
+**Press and hold** a pane for its options: *Edit pane*, *Edit background*, *Hide pane* and
+*Swap panes*. With only one pane showing (the main pane), the last two become *Add left pane* and
+*Add right pane*. **Swipe sideways** on a pane to flip it between player and lyrics.
 
-- **Panes** can be switched off (the other one moves to the center) and set to *Player* or
-  *Lyrics* — both panes can be the same type. Player panes show the song title with "Artist · Album · Year" below, and
-  each part (plus the album art, slider, play/pause and fast-forward/rewind) can be switched off;
-  the album title is off by default. The album art grows to fill the space.
+While editing, the pane is a dimmed preview and its settings take over the other side; tap ✓ to
+keep the changes or ✕ to discard them. Settings are saved on each device separately.
+
+- **Player panes** show the song title with "Artist · Album · Year" below, an optional
+  "date, time, battery" line at the top, and optional 15-second skip buttons; each part (and the
+  album art, slider, play/pause and fast-forward/rewind) can be switched off. The album art grows to
+  fill the space. *Battery* only works in Chrome-based browsers; iPhones don't share it with websites.
 - **Background** can be black, white, any custom colour, or matched to the album art. Text and
   controls switch between light and dark to stay readable.
+- **Log out** from the bottom of a player or lyrics pane's settings.
 
 ### Older iPhones (iOS 15 and earlier)
 

@@ -21,7 +21,26 @@ export function setImage(img, url) {
   if (img.getAttribute('src') !== src) img.src = src;
 }
 
-// actions: { togglePlay, previous, next, seek(ms), logout }
+// Battery level, where the browser shares it. iPhones never do (Safari has no Battery API).
+const battery = { supported: 'getBattery' in navigator, level: null };
+if (battery.supported) {
+  navigator.getBattery().then((b) => {
+    const read = () => { battery.level = b.level; };
+    read();
+    b.addEventListener('levelchange', read);
+  }).catch(() => { battery.supported = false; });
+}
+export const batterySupported = () => battery.supported;
+
+const hour12 = new Intl.DateTimeFormat([], { hour: 'numeric' }).resolvedOptions().hour12;
+
+// "12:25", like the iPhone status bar (no AM/PM).
+function formatTime(date) {
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return hour12 ? `${date.getHours() % 12 || 12}:${minutes}` : `${String(date.getHours()).padStart(2, '0')}:${minutes}`;
+}
+
+// actions: { togglePlay, previous, next, jump(deltaMs), seek(ms) }
 export class PlayerView {
   constructor(show, actions) {
     this.el = fromTemplate('tpl-player');
@@ -29,8 +48,10 @@ export class PlayerView {
     this.playback = null;
     this.dragPosition = null; // ms under the finger while scrubbing
     this.lastFill = -1;
+    this.lastStatusAt = 0;
 
     const $ = (selector) => this.el.querySelector(selector);
+    this.status = { date: $('.date'), time: $('.time'), battery: $('.battery') };
     this.artBox = $('.art-box');
     this.art = $('.art');
     this.title = $('.title');
@@ -42,20 +63,31 @@ export class PlayerView {
     this.progressTrack = $('.progress-track');
     this.progressFill = $('.progress-fill');
     this.controls = $('.controls');
-    this.buttons = { prev: $('.prev'), play: $('.play'), next: $('.next') };
+    this.buttons = {
+      back15: $('.back15'), prev: $('.prev'), play: $('.play'), next: $('.next'), fwd15: $('.fwd15'),
+    };
 
+    const hasStatus = show.date || show.time || (show.battery && battery.supported);
+    this.el.classList.toggle('has-status', hasStatus);
+    this.el.classList.toggle('has-art', show.art);
+    $('.status').hidden = !hasStatus;
     this.artBox.hidden = !show.art;
     this.title.hidden = !show.title;
     this.progress.hidden = !show.slider;
-    this.buttons.play.hidden = !show.playPause;
-    this.buttons.prev.hidden = this.buttons.next.hidden = !show.skip;
-    this.controls.hidden = !show.playPause && !show.skip;
+    const { back15, prev, play, next, fwd15 } = this.buttons;
+    play.hidden = !show.playPause;
+    prev.hidden = next.hidden = !show.skip;
+    back15.hidden = fwd15.hidden = !show.jump;
+    this.controls.hidden = !show.playPause && !show.skip && !show.jump;
+    this.controls.classList.toggle('with-jump', show.jump);
+    this.controls.classList.toggle('only-play', show.playPause && !show.skip && !show.jump);
     this.controls.classList.toggle('no-play', !show.playPause);
-    this.controls.classList.toggle('no-skip', !show.skip);
 
-    this.buttons.play.addEventListener('click', actions.togglePlay);
-    this.buttons.prev.addEventListener('click', actions.previous);
-    this.buttons.next.addEventListener('click', actions.next);
+    play.addEventListener('click', actions.togglePlay);
+    prev.addEventListener('click', actions.previous);
+    next.addEventListener('click', actions.next);
+    back15.addEventListener('click', () => actions.jump(-15000));
+    fwd15.addEventListener('click', () => actions.jump(15000));
 
     this.progress.addEventListener('pointerdown', (e) => {
       if (!this.playback) return;
@@ -73,23 +105,13 @@ export class PlayerView {
     });
     this.progress.addEventListener('pointercancel', () => { this.dragPosition = null; });
 
-    // Long-press the album art to log out (kept hidden so the screen stays uncluttered).
-    let pressTimer = 0;
-    this.art.addEventListener('pointerdown', () => {
-      clearTimeout(pressTimer);
-      pressTimer = setTimeout(actions.logout, 800);
-    });
-    for (const type of ['pointerup', 'pointerleave', 'pointercancel']) {
-      this.art.addEventListener(type, () => clearTimeout(pressTimer));
-    }
-    this.art.addEventListener('contextmenu', (e) => e.preventDefault());
-
     // The art is square and as big as the space the other parts leave free.
     this.resizer = new ResizeObserver(() => {
       const size = Math.floor(Math.min(this.artBox.clientWidth, this.artBox.clientHeight));
       this.art.style.width = this.art.style.height = `${size}px`;
     });
     this.resizer.observe(this.artBox);
+    this.renderStatus();
   }
 
   positionFromPointer(e) {
@@ -116,10 +138,24 @@ export class PlayerView {
     this.subtitle.hidden = first;
     setImage(this.art, playback?.art);
 
-    const { prev, play, next } = this.buttons;
+    const { play } = this.buttons;
     play.classList.toggle('playing', !!playback?.isPlaying);
     play.setAttribute('aria-label', playback?.isPlaying ? 'Pause' : 'Play');
-    for (const button of [prev, play, next]) button.disabled = !playback;
+    for (const button of Object.values(this.buttons)) button.disabled = !playback;
+  }
+
+  // Date, time and battery, e.g. "Oct 6   12:25   87%".
+  renderStatus() {
+    const now = new Date();
+    const values = {
+      date: this.show.date ? now.toLocaleDateString([], { month: 'short', day: 'numeric' }) : '',
+      time: this.show.time ? formatTime(now) : '',
+      battery: this.show.battery && battery.level != null ? `${Math.round(battery.level * 100)}%` : '',
+    };
+    for (const [key, text] of Object.entries(values)) {
+      setText(this.status[key], text);
+      this.status[key].hidden = !text;
+    }
   }
 
   tick(position) {
@@ -128,6 +164,11 @@ export class PlayerView {
     if (rounded !== this.lastFill) {
       this.progressFill.style.transform = `scaleX(${rounded})`;
       this.lastFill = rounded;
+    }
+    const now = performance.now();
+    if (now - this.lastStatusAt > 1000) {
+      this.lastStatusAt = now;
+      this.renderStatus();
     }
   }
 
