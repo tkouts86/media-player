@@ -338,10 +338,13 @@ function addPane(mainIndex, side) {
   });
 }
 
-function flipRotation() {
-  const mode = innerHeight > innerWidth ? 'upright' : 'sideways';
-  changeLayout((l) => { l.flip[mode] = !l.flip[mode]; });
+function toggleOrientation() {
+  changeLayout((l) => { l.orientation = l.orientation === 'landscape' ? 'portrait' : 'landscape'; });
   applyRotation();
+}
+
+function sideName(index) {
+  return (layout.orientation === 'portrait' ? ['top', 'bottom'] : ['left', 'right'])[index];
 }
 
 // Swiping sideways flips a pane between player and lyrics.
@@ -352,18 +355,26 @@ function switchPaneType(index, towardLeft) {
   slotViews[index]?.el.classList.add(towardLeft ? 'enter-from-right' : 'enter-from-left');
 }
 
-// ---- Always horizontal ---------------------------------------------------------------------
-// When the screen is upright (the phone is held that way, or rotation lock keeps it there), the
-// player is turned 90° so it's still horizontal. "Rotate" turns it the other way round, since
-// with rotation lock on there's no telling which way the phone is lying.
+// ---- Orientation ---------------------------------------------------------------------------
+// The player keeps the chosen orientation (landscape by default) however the screen is turned.
+// With rotation lock on, the screen stays upright, so landscape means turning the player 90°.
+// iOS still draws its status bar along the phone's top edge then; in portrait it's the right
+// way up.
 
 function applyRotation() {
   const root = document.documentElement.style;
   root.setProperty('--app-w', `${innerWidth}px`);
   root.setProperty('--app-h', `${innerHeight}px`);
   const upright = innerHeight > innerWidth;
-  const turn = upright ? (layout.flip.upright ? -90 : 90) : (layout.flip.sideways ? 180 : 0);
+  let turn = 0;
+  if (layout.orientation === 'landscape' && upright) turn = 90;
+  if (layout.orientation === 'portrait' && !upright) {
+    // Turn so the player's top is at the phone's top: 90 means the phone was turned to the left.
+    const angle = typeof window.orientation === 'number' ? window.orientation : screen.orientation?.angle;
+    turn = angle === 90 ? -90 : 90;
+  }
   els.player.dataset.rotate = turn;
+  els.player.dataset.layout = layout.orientation;
   setTurn(turn);
 }
 addEventListener('resize', applyRotation);
@@ -446,8 +457,8 @@ function openPaneMenu(index, x, y) {
     ['Edit background', () => startEditing('background')],
     ...(both
       ? [['Hide pane', () => hidePane(index)], ['Swap panes', swapPanes]]
-      : [['Add left pane', () => addPane(index, 0)], ['Add right pane', () => addPane(index, 1)]]),
-    ['Rotate', flipRotation],
+      : [0, 1].map((side) => [`Add ${sideName(side)} pane`, () => addPane(index, side)])),
+    [layout.orientation === 'landscape' ? 'Portrait' : 'Landscape', toggleOrientation],
   ];
   els.menuItems.replaceChildren(...items.map(([label, run]) => {
     const button = document.createElement('button');

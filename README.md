@@ -2,8 +2,10 @@
 
 A full-screen "now playing" display and remote for Spotify, built for iPhone.
 Album art, playback controls and time-synced lyrics (tap a line to jump to it), in two panes
-side by side. It's always horizontal: if the screen is upright (or rotation lock is on), the player
-is turned sideways, and *Rotate* in the press-and-hold menu turns it the other way round.
+side by side (landscape) or stacked (portrait). The app keeps the chosen orientation however the
+screen is turned — with rotation lock on, landscape means the player is drawn sideways. Switch with
+*Portrait* / *Landscape* in the press-and-hold menu. (iOS draws its status bar along the phone's top
+edge and hides it in true landscape, so the battery only shows the right way up in portrait.)
 
 It's a plain static website — no server, no build step. Login uses Spotify's PKCE flow,
 lyrics come from [LRCLIB](https://lrclib.net).
@@ -47,8 +49,8 @@ instead of cached ones.
 ## Customizing
 
 **Press and hold** a pane for its options: *Edit pane*, *Edit background*, *Hide pane* and
-*Swap panes*, plus *Rotate*. With only one pane showing (the main pane), *Hide* and *Swap* become
-*Add left pane* and *Add right pane*. **Swipe sideways** on a pane to flip it between player and lyrics.
+*Swap panes*, plus *Portrait* or *Landscape*. With only one pane showing (the main pane), *Hide* and *Swap* become
+*Add left pane* and *Add right pane* (top/bottom in portrait). **Swipe sideways** on a pane to flip it between player and lyrics.
 
 While editing, the pane is a dimmed preview and its settings take over the other side; tap ✓ to
 keep the changes or ✕ to discard them. Settings are saved on each device separately.
