@@ -1,3 +1,5 @@
+import { toLocal, localRect } from './rotation.js';
+
 // What a pane can show. Each pane gets its own instance, so both panes can show the same kind.
 // Every view has update(playback, lyrics) for new data, tick(positionMs) every frame, and destroy().
 
@@ -127,8 +129,9 @@ export class PlayerView {
   }
 
   positionFromPointer(e) {
-    const rect = this.progressTrack.getBoundingClientRect();
-    return Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)) * this.playback.durationMs;
+    const rect = localRect(this.progressTrack); // the player may be turned sideways
+    const { x } = toLocal(e.clientX, e.clientY);
+    return Math.min(1, Math.max(0, (x - rect.left) / rect.width)) * this.playback.durationMs;
   }
 
   update(playback) {

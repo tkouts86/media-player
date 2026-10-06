@@ -31,6 +31,9 @@ export function defaultLayout() {
   const show = Object.fromEntries(PLAYER_PARTS.map(([key, , on]) => [key, on]));
   return {
     background: { mode: 'color', color: '#000000' }, // mode: 'color' | 'album'
+    // "Rotate": turned the other way round, remembered separately for when the screen is upright
+    // (rotation lock on) and when it's sideways.
+    flip: { upright: false, sideways: false },
     panes: [
       { on: true, type: 'player', show: { ...show } },
       { on: true, type: 'lyrics', show: { ...show } },
@@ -51,6 +54,7 @@ export function loadLayout() {
     mode: bg.mode === 'album' ? 'album' : 'color',
     color: /^#[0-9a-f]{6}$/i.test(bg.color) ? bg.color : '#000000',
   };
+  layout.flip = { upright: saved.flip?.upright === true, sideways: saved.flip?.sideways === true };
   layout.panes.forEach((pane, i) => {
     const s = saved.panes?.[i] ?? {};
     pane.on = s.on !== false;

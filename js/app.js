@@ -6,6 +6,7 @@ import * as link from './link.js';
 import { PlayerView, LyricsView } from './views.js';
 import { loadLayout, saveLayout, copyLayout, themeFor, albumColor } from './layout.js';
 import { paneSettings, backgroundSettings } from './editor.js';
+import { setTurn, toLocal } from './rotation.js';
 
 const isDemo = new URLSearchParams(location.search).has('demo');
 const api = isDemo ? demoApi : spotify;
@@ -25,7 +26,6 @@ const els = {
   menu: $('menu'), menuItems: $('menu-items'), menuVersion: $('menu-version'), bgFrame: $('bg-frame'), toast: $('toast'),
 };
 const screens = [els.login, els.linkReceive, els.linkSend, els.player];
-const portrait = matchMedia('(orientation: portrait)');
 
 // Latest known playback, or null when nothing is playing. Progress between polls is
 // estimated locally from progressMs + time since fetchedAt.
@@ -256,10 +256,6 @@ const paneSizer = new ResizeObserver((entries) => {
 });
 els.paneSlots.forEach((slot) => paneSizer.observe(slot));
 
-function sideName(index) {
-  return (portrait.matches ? ['top', 'bottom'] : ['left', 'right'])[index];
-}
-
 const slotViews = [null, null]; // the view shown in each pane slot, if any
 
 // Fills each pane slot from the layout being shown (the draft while editing). A slot whose
@@ -318,8 +314,6 @@ async function updateAlbumBackground() {
   applyTheme();
 }
 
-portrait.addEventListener('change', () => settings?.refresh());
-
 function changeLayout(change) {
   change(layout);
   saveLayout(layout);
@@ -344,6 +338,12 @@ function addPane(mainIndex, side) {
   });
 }
 
+function flipRotation() {
+  const mode = innerHeight > innerWidth ? 'upright' : 'sideways';
+  changeLayout((l) => { l.flip[mode] = !l.flip[mode]; });
+  applyRotation();
+}
+
 // Swiping sideways flips a pane between player and lyrics.
 function switchPaneType(index, towardLeft) {
   changeLayout((l) => {
@@ -352,7 +352,29 @@ function switchPaneType(index, towardLeft) {
   slotViews[index]?.el.classList.add(towardLeft ? 'enter-from-right' : 'enter-from-left');
 }
 
+// ---- Always horizontal ---------------------------------------------------------------------
+// When the screen is upright (the phone is held that way, or rotation lock keeps it there), the
+// player is turned 90° so it's still horizontal. "Rotate" turns it the other way round, since
+// with rotation lock on there's no telling which way the phone is lying.
+
+function applyRotation() {
+  const root = document.documentElement.style;
+  root.setProperty('--app-w', `${innerWidth}px`);
+  root.setProperty('--app-h', `${innerHeight}px`);
+  const upright = innerHeight > innerWidth;
+  const turn = upright ? (layout.flip.upright ? -90 : 90) : (layout.flip.sideways ? 180 : 0);
+  els.player.dataset.rotate = turn;
+  setTurn(turn);
+}
+addEventListener('resize', applyRotation);
+matchMedia('(orientation: portrait)').addEventListener('change', applyRotation);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) applyRotation(); });
+applyRotation();
+
 // ---- Pressing and holding a pane, swiping a pane -------------------------------------------
+// Positions are converted to the player's own coordinates, since it may be turned sideways.
+// Touches use touch events, which keep arriving while the lyrics scroll; the mouse uses pointer
+// events.
 
 const LONG_PRESS_MS = 550;
 const SWIPE_MIN_PX = 60;
@@ -362,9 +384,9 @@ els.paneSlots.forEach((slot, index) => {
   let timer = 0;
   let suppressClick = false;
 
-  slot.addEventListener('pointerdown', (e) => {
-    if (!e.isPrimary || editing !== null || e.target.closest('.progress')) return; // the slider drags
-    start = { x: e.clientX, y: e.clientY, at: performance.now() };
+  const begin = (x, y, target) => {
+    if (editing !== null || target.closest('.progress')) return; // the slider has its own drag
+    start = { ...toLocal(x, y), at: performance.now() };
     suppressClick = false;
     clearTimeout(timer);
     timer = setTimeout(() => {
@@ -372,26 +394,41 @@ els.paneSlots.forEach((slot, index) => {
       openPaneMenu(index, start.x, start.y);
       start = null;
     }, LONG_PRESS_MS);
-  });
-  slot.addEventListener('pointermove', (e) => {
-    if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 10) clearTimeout(timer);
-  });
-  slot.addEventListener('pointerup', (e) => {
+  };
+  const move = (x, y) => {
+    if (!start) return;
+    const p = toLocal(x, y);
+    if (Math.hypot(p.x - start.x, p.y - start.y) > 10) clearTimeout(timer);
+  };
+  const end = (x, y) => {
     clearTimeout(timer);
     if (!start) return;
-    const dx = e.clientX - start.x;
-    const dy = e.clientY - start.y;
+    const p = toLocal(x, y);
+    const dx = p.x - start.x;
+    const dy = p.y - start.y;
     const quick = performance.now() - start.at < 800;
     start = null;
     if (quick && Math.abs(dx) > SWIPE_MIN_PX && Math.abs(dx) > 2 * Math.abs(dy)) {
       suppressClick = true;
       switchPaneType(index, dx < 0);
     }
-  });
-  slot.addEventListener('pointercancel', () => {
+  };
+  const cancel = () => {
     clearTimeout(timer);
     start = null;
-  });
+  };
+
+  slot.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) begin(e.touches[0].clientX, e.touches[0].clientY, e.target);
+    else cancel();
+  }, { passive: true });
+  slot.addEventListener('touchmove', (e) => move(e.touches[0].clientX, e.touches[0].clientY), { passive: true });
+  slot.addEventListener('touchend', (e) => end(e.changedTouches[0].clientX, e.changedTouches[0].clientY), { passive: true });
+  slot.addEventListener('touchcancel', cancel, { passive: true });
+  slot.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') begin(e.clientX, e.clientY, e.target); });
+  slot.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') move(e.clientX, e.clientY); });
+  slot.addEventListener('pointerup', (e) => { if (e.pointerType === 'mouse') end(e.clientX, e.clientY); });
+
   slot.addEventListener('click', (e) => {
     if (!suppressClick) return;
     suppressClick = false;
@@ -401,6 +438,7 @@ els.paneSlots.forEach((slot, index) => {
   slot.addEventListener('contextmenu', (e) => e.preventDefault());
 });
 
+// x and y are in the player's own coordinates.
 function openPaneMenu(index, x, y) {
   const both = layout.panes.every((pane) => pane.on);
   const items = [
@@ -408,7 +446,8 @@ function openPaneMenu(index, x, y) {
     ['Edit background', () => startEditing('background')],
     ...(both
       ? [['Hide pane', () => hidePane(index)], ['Swap panes', swapPanes]]
-      : [0, 1].map((side) => [`Add ${sideName(side)} pane`, () => addPane(index, side)])),
+      : [['Add left pane', () => addPane(index, 0)], ['Add right pane', () => addPane(index, 1)]]),
+    ['Rotate', flipRotation],
   ];
   els.menuItems.replaceChildren(...items.map(([label, run]) => {
     const button = document.createElement('button');
@@ -424,11 +463,12 @@ function openPaneMenu(index, x, y) {
   els.menuVersion.textContent = Number.isNaN(loadedVersion) ? '' : `Updated ${new Date(loadedVersion)
     .toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
 
-  // Open next to the finger, kept on screen.
+  // Open next to the finger, kept inside the player.
   els.menu.hidden = false;
-  const { width, height } = els.menu.getBoundingClientRect();
-  els.menu.style.left = `${Math.max(8, Math.min(x, innerWidth - width - 8))}px`;
-  els.menu.style.top = `${Math.max(8, Math.min(y, innerHeight - height - 8))}px`;
+  const { offsetWidth: width, offsetHeight: height } = els.menu;
+  const { clientWidth: maxX, clientHeight: maxY } = els.player;
+  els.menu.style.left = `${Math.max(8, Math.min(x, maxX - width - 8))}px`;
+  els.menu.style.top = `${Math.max(8, Math.min(y, maxY - height - 8))}px`;
 }
 
 function closeMenu() {
