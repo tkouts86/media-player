@@ -19,6 +19,7 @@ export const PLAYER_PART_GROUPS = [
   ],
   [
     ['slider', 'Slider', true],
+    ['times', 'Time Stamps', true],
     ['playPause', 'Play/Pause', true],
     ['skip', 'Fast-Forward/Rewind', true],
     ['jump', '15-Second Skip', false],

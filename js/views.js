@@ -88,7 +88,9 @@ export class PlayerView {
     $('.status').hidden = !hasStatus;
     this.artBox.hidden = !show.art;
     this.title.hidden = !show.title;
-    this.progressRow.hidden = !show.slider;
+    this.progressRow.hidden = !show.slider && !show.times;
+    this.progress.hidden = !show.slider;
+    this.el.querySelector('.times').hidden = !show.times;
     const { back15, prev, play, next, fwd15 } = this.buttons;
     prev.hidden = next.hidden = !show.skip;
     back15.hidden = fwd15.hidden = !show.jump;

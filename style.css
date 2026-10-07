@@ -232,16 +232,19 @@ button {
   cursor: pointer;
   touch-action: none;
 }
-/* Elapsed and remaining time, small, under each end of the slider. */
+/* Elapsed and remaining time, small, 4px under each end of the slider. They sit over the slider's
+   extra touch area, so they let touches through to it. */
 .times {
   display: flex;
   justify-content: space-between;
-  margin-top: calc(-0.6 * var(--u));
+  margin-top: calc(4px - 1.5 * var(--u)); /* 4px below the bar, inside the slider's touch padding */
+  pointer-events: none;
   font-size: calc(3 * var(--u));
   line-height: 1.2;
   color: var(--fg-2);
   font-variant-numeric: tabular-nums; /* digits don't shift as the time changes */
 }
+.progress[hidden] + .times { margin-top: 0; } /* times on their own, without the slider */
 .progress-track {
   height: calc(1.6 * var(--u));
   border-radius: 999px;

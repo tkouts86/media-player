@@ -57,7 +57,7 @@ While editing, the pane is a dimmed preview and its settings take over the other
 keep the changes or ✕ to discard them. Settings are saved on each device separately.
 
 - **Player panes** show the song title with "Artist · Album · Year" below, an optional
-  "date, time, battery" line at the top, elapsed/remaining time beside the slider, and optional
+  "date, time, battery" line at the top, elapsed/remaining time under the slider, and optional
   15-second skip buttons that sit next to play/pause; each part (and the album art, slider,
   play/pause and fast-forward/rewind) can be switched off. The album art grows to
   fill the space. *Battery* only works in Chrome-based browsers; iPhones don't share it with websites.
