@@ -31,9 +31,6 @@ export function defaultLayout() {
   const show = Object.fromEntries(PLAYER_PARTS.map(([key, , on]) => [key, on]));
   return {
     background: { mode: 'color', color: '#000000' }, // mode: 'color' | 'album'
-    // The orientation the player keeps however the screen is turned: 'landscape' (panes side by
-    // side) or 'portrait' (panes stacked).
-    orientation: 'landscape',
     panes: [
       { on: true, type: 'player', show: { ...show } },
       { on: true, type: 'lyrics', show: { ...show } },
@@ -54,7 +51,6 @@ export function loadLayout() {
     mode: bg.mode === 'album' ? 'album' : 'color',
     color: /^#[0-9a-f]{6}$/i.test(bg.color) ? bg.color : '#000000',
   };
-  layout.orientation = saved.orientation === 'portrait' ? 'portrait' : 'landscape';
   layout.panes.forEach((pane, i) => {
     const s = saved.panes?.[i] ?? {};
     pane.on = s.on !== false;

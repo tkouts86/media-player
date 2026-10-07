@@ -6,7 +6,7 @@ import * as link from './link.js';
 import { PlayerView, LyricsView } from './views.js';
 import { loadLayout, saveLayout, copyLayout, themeFor, albumColor } from './layout.js';
 import { paneSettings, backgroundSettings } from './editor.js';
-import { setTurn, toLocal } from './rotation.js';
+import { toLocal } from './rotation.js';
 
 const isDemo = new URLSearchParams(location.search).has('demo');
 const api = isDemo ? demoApi : spotify;
@@ -338,13 +338,8 @@ function addPane(mainIndex, side) {
   });
 }
 
-function toggleOrientation() {
-  changeLayout((l) => { l.orientation = l.orientation === 'landscape' ? 'portrait' : 'landscape'; });
-  applyRotation();
-}
-
 function sideName(index) {
-  return (layout.orientation === 'portrait' ? ['top', 'bottom'] : ['left', 'right'])[index];
+  return (paneOrientation === 'portrait' ? ['top', 'bottom'] : ['left', 'right'])[index];
 }
 
 // Swiping sideways flips a pane between player and lyrics.
@@ -356,31 +351,45 @@ function switchPaneType(index, towardLeft) {
 }
 
 // ---- Orientation ---------------------------------------------------------------------------
-// The player keeps the chosen orientation (landscape by default) however the screen is turned.
-// With rotation lock on, the screen stays upright, so landscape means turning the player 90°.
-// iOS still draws its status bar along the phone's top edge then; in portrait it's the right
-// way up.
+// The panes are laid out landscape (side by side) or portrait (stacked). Turning the phone switches
+// the layout to match; "Portrait"/"Landscape" in the press-and-hold menu switches it without
+// turning the phone. When the layout doesn't match the screen (e.g. landscape with rotation lock
+// on), style.css draws the player turned 90°, sized from the screen itself so it's never stale.
+// The app always opens in landscape.
 
-function applyRotation() {
-  const root = document.documentElement.style;
-  root.setProperty('--app-w', `${innerWidth}px`);
-  root.setProperty('--app-h', `${innerHeight}px`);
-  const upright = innerHeight > innerWidth;
-  let turn = 0;
-  if (layout.orientation === 'landscape' && upright) turn = 90;
-  if (layout.orientation === 'portrait' && !upright) {
-    // Turn so the player's top is at the phone's top: 90 means the phone was turned to the left.
-    const angle = typeof window.orientation === 'number' ? window.orientation : screen.orientation?.angle;
-    turn = angle === 90 ? -90 : 90;
-  }
-  els.player.dataset.rotate = turn;
-  els.player.dataset.layout = layout.orientation;
-  setTurn(turn);
+const screenUpright = matchMedia('(orientation: portrait)');
+let paneOrientation = 'landscape';
+let screenWasUpright = screenUpright.matches;
+// iOS sometimes re-orients the app by itself while it opens; that isn't the phone being turned.
+const ignoreTurnsUntil = performance.now() + 2000;
+
+function setOrientation(orientation) {
+  paneOrientation = orientation;
+  els.player.dataset.layout = orientation;
 }
-addEventListener('resize', applyRotation);
-matchMedia('(orientation: portrait)').addEventListener('change', applyRotation);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) applyRotation(); });
-applyRotation();
+
+function toggleOrientation() {
+  setOrientation(paneOrientation === 'landscape' ? 'portrait' : 'landscape');
+}
+
+function onScreenTurned() {
+  // A portrait layout on a sideways screen is turned so its top is at the phone's top;
+  // 90 means the phone was turned to the left.
+  const angle = typeof window.orientation === 'number' ? window.orientation : screen.orientation?.angle;
+  els.player.dataset.tilt = angle === 90 ? 'left' : 'right';
+
+  const upright = screenUpright.matches;
+  if (upright === screenWasUpright) return;
+  screenWasUpright = upright;
+  if (performance.now() < ignoreTurnsUntil) return;
+  setOrientation(upright ? 'portrait' : 'landscape'); // no change if the layout already matches
+}
+
+screenUpright.addEventListener('change', onScreenTurned);
+addEventListener('resize', onScreenTurned);
+addEventListener('orientationchange', () => setTimeout(onScreenTurned, 300));
+setOrientation('landscape');
+onScreenTurned();
 
 // ---- Pressing and holding a pane, swiping a pane -------------------------------------------
 // Positions are converted to the player's own coordinates, since it may be turned sideways.
@@ -458,7 +467,7 @@ function openPaneMenu(index, x, y) {
     ...(both
       ? [['Hide pane', () => hidePane(index)], ['Swap panes', swapPanes]]
       : [0, 1].map((side) => [`Add ${sideName(side)} pane`, () => addPane(index, side)])),
-    [layout.orientation === 'landscape' ? 'Portrait' : 'Landscape', toggleOrientation],
+    [paneOrientation === 'landscape' ? 'Portrait' : 'Landscape', toggleOrientation],
   ];
   els.menuItems.replaceChildren(...items.map(([label, run]) => {
     const button = document.createElement('button');

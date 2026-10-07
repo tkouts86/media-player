@@ -1,22 +1,19 @@
-// The player is always horizontal: when the screen is upright (or the phone has rotation lock on),
-// app.js turns it 90° sideways, and "Rotate" turns it the other way round. Finger positions arrive
-// in screen coordinates; these helpers convert them to the player's own, unturned coordinates.
+// The player may be drawn turned 90° (see "Orientation" in app.js and style.css). Finger positions
+// arrive in screen coordinates; these helpers convert them to the player's own, unturned ones.
+// The turn is read from the player's actual transform, so it's always in step with the screen.
 
-let turn = 0; // degrees: 0, 90, -90 or 180
-
-export function setTurn(degrees) {
-  turn = degrees;
+function playerTurn() {
+  const player = document.getElementById('player');
+  const transform = getComputedStyle(player).transform;
+  const b = transform === 'none' ? 0 : new DOMMatrixReadOnly(transform).b; // sin of the angle
+  return { box: player.getBoundingClientRect(), turn: b > 0.5 ? 90 : b < -0.5 ? -90 : 0 };
 }
 
 export function toLocal(x, y) {
-  const w = innerWidth;
-  const h = innerHeight;
-  switch (turn) {
-    case 90: return { x: y, y: w - x };
-    case -90: return { x: h - y, y: x };
-    case 180: return { x: w - x, y: h - y };
-    default: return { x, y };
-  }
+  const { box, turn } = playerTurn();
+  if (turn === 90) return { x: y - box.top, y: box.right - x };
+  if (turn === -90) return { x: box.bottom - y, y: x - box.left };
+  return { x: x - box.left, y: y - box.top };
 }
 
 // An element's box in the player's coordinates.
